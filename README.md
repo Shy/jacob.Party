@@ -2,7 +2,7 @@
 
 A demonstration project for the [Swift SDK for Temporal](https://github.com/apple/swift-temporal-sdk) showing how to build a real-world application with Temporal workflows, activities, and workers in Swift.
 
-**The App**: Let your friends know when you're out partying so they can come join you. Start the party on your iPhone, and your friends can see your location on the web in real-time. Built for my friend Jake who wanted an easy way to broadcast party status.
+**The App**: Let your friends know when you're out partying so they can come join you. Start the party on your iPhone, and your friends can see your location on the web in real-time. Built for my friend [Jake](https://www.linkedin.com/in/jacob-price-05a6562b/) who wanted an easy way to broadcast party status.
 
 The app consists of three components that all communicate through Temporal:
 
