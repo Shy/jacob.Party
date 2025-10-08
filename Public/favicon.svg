@@ -1,0 +1,50 @@
+<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Gradient background matching the website -->
+  <defs>
+    <linearGradient id="partyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Glowing effect -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Rounded background with gradient -->
+  <rect width="512" height="512" fill="url(#partyGradient)" rx="100"/>
+  
+  <!-- Animated particle effects (confetti) -->
+  <circle cx="120" cy="80" r="6" fill="#ffffff" opacity="0.8">
+    <animate attributeName="cy" values="80;120;80" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0.5;0.8" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="400" cy="120" r="5" fill="#fbbf24" opacity="0.9">
+    <animate attributeName="cy" values="120;90;120" dur="2.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.9;0.6;0.9" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="90" cy="420" r="7" fill="#f472b6" opacity="0.85">
+    <animate attributeName="cy" values="420;390;420" dur="2.8s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.85;0.5;0.85" dur="2.8s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="430" cy="400" r="6" fill="#34d399" opacity="0.8">
+    <animate attributeName="cy" values="400;430;400" dur="3.2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0.6;0.8" dur="3.2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="256" cy="100" r="5" fill="#fb923c" opacity="0.9">
+    <animate attributeName="cy" values="100;130;100" dur="2.6s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.9;0.5;0.9" dur="2.6s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="350" cy="450" r="6" fill="#a78bfa" opacity="0.8">
+    <animate attributeName="cy" values="450;420;450" dur="3.4s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0.5;0.8" dur="3.4s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- Party emoji 🎉 as text with glow -->
+  <text x="256" y="320" font-size="280" text-anchor="middle" filter="url(#glow)">🎉</text>
+</svg>
