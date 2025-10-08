@@ -1,6 +1,16 @@
 # jacob.party
 
-Real-time party tracking demonstrating Temporal workflows with Swift, SwiftUI, and Vapor.
+A demonstration project for the [Swift SDK for Temporal](https://github.com/apple/swift-temporal-sdk) showing how to build a real-world application with Temporal workflows, activities, and workers in Swift.
+
+**The App**: Let your friends know when you're out partying so they can come join you. Start the party on your iPhone, and your friends can see your location on the web in real-time. Built for my friend Jake who wanted an easy way to broadcast party status.
+
+The app consists of three components that all communicate through Temporal:
+
+- **Vapor Server** - HTTP API that triggers Temporal workflows
+- **iOS App** - SwiftUI app with background location tracking and device authentication
+- **Web Interface** - Real-time party status display with Google Maps integration
+
+**The Goal**: Demonstrate practical patterns for using Temporal with Swift, including workflow definitions, activity implementations, mTLS authentication with Temporal Cloud, and integrating Temporal workers into existing Swift server applications.
 
 ## Structure
 
