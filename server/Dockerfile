@@ -25,15 +25,10 @@ RUN swift package resolve
 COPY Sources ./Sources
 COPY Resources ./Resources
 
-# Build the application in release mode with optimizations
-# - Strip debug symbols to reduce binary size
-# - Enable cross-module optimization for better performance
-# - Skip exclusivity checks for faster builds (safe for release)
-RUN swift build \
-    -c release \
-    -Xswiftc -g0 \
-    -Xswiftc -cross-module-optimization \
-    -Xswiftc -enforce-exclusivity=unchecked
+# Build the application in release mode
+# Use fewer parallel jobs to reduce memory usage
+# --jobs 1 prevents OOM errors in resource-constrained environments
+RUN swift build -c release --jobs 1
 
 # Runtime stage - uses Swift runtime image (has Swift libs but not compiler)
 # This is much smaller than the builder image (~600MB vs ~1.5GB)
