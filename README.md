@@ -12,14 +12,22 @@ The app consists of three components that all communicate through Temporal:
 
 **The Goal**: Demonstrate practical patterns for using Temporal with Swift, including workflow definitions, activity implementations, mTLS authentication with Temporal Cloud, and integrating Temporal workers into existing Swift server applications.
 
-## Structure
+## Monorepo Structure
 
 ```
-├── Sources/App/              # Vapor server + Temporal worker
-│   ├── Workflows/            # Temporal workflows
-│   └── Activities/           # Temporal activities
-├── app/JacobParty/           # iOS app (SwiftUI)
-└── Resources/Views/          # Web interface
+├── server/                   # Vapor server + Temporal worker
+│   ├── Sources/App/          # Server application code
+│   │   ├── Workflows/        # Temporal workflow definitions
+│   │   ├── Activities/       # Temporal activity implementations
+│   │   └── Middleware/       # Auth & rate limiting
+│   ├── Resources/Views/      # Web interface (HTML)
+│   ├── Dockerfile            # Docker image for server
+│   └── docker-compose.yml    # Server orchestration
+├── app/                      # iOS app (SwiftUI)
+│   └── JacobParty/           # Xcode project
+├── certs/                    # Temporal Cloud mTLS certificates (gitignored)
+├── .env                      # Environment configuration (gitignored)
+└── .env.example              # Environment template
 ```
 
 ## What This Demonstrates
@@ -37,15 +45,24 @@ The app consists of three components that all communicate through Temporal:
 - HTTP API triggering workflows
 
 **iOS Integration**
-- Real-time location tracking with automatic updates
+- Battery-efficient location tracking (10m accuracy, 50m distance filter)
+- Automatic updates only when moved >50m AND 60+ seconds elapsed
 - Device-based authentication with Keychain UUID storage
 - Background location updates while party is active
 - Secure communication with server via authenticated API requests
+
+**Performance & Battery Optimization**
+- iOS: 10-meter accuracy instead of Best (saves ~40-50% battery)
+- iOS: Auto-pause location updates when stationary
+- Web: Exponential backoff polling (10s → 30s → 60s → 120s)
+- Web: Stops polling entirely when tab is hidden
+- Server: Rate limiting (30 requests/minute per IP)
 
 **Security**
 - Device authentication middleware
 - UUID-based device whitelist
 - Secure keychain storage for persistent device identity
+- Rate limiting protection against abuse
 
 **Storage**
 - JSON file-based persistence (no database required)
@@ -114,6 +131,7 @@ ALLOWED_DEVICE_IDS=
 ### 4. Run Server
 
 ```bash
+cd server
 swift build
 .build/debug/App
 ```
@@ -183,6 +201,27 @@ With whitelist enabled:
 
 Anyone can view the website and see where the party is, but only authorized devices can control it.
 
+## Container Deployment
+
+Build and run with Docker:
+
+```bash
+cd server
+
+# Build the container
+docker build -t jacob-party .
+
+# Run with environment file
+docker run -p 8080:8080 --env-file ../.env -v $(pwd)/../certs:/app/certs:ro jacob-party
+```
+
+Or use Docker Compose:
+
+```bash
+cd server
+docker-compose up -d
+```
+
 ## Using Temporal Cloud
 
 See [certs/README.md](certs/README.md) for certificate setup.
@@ -209,7 +248,7 @@ POST /api/party/start → PartyWorkflow → recordPartyStart activity → Write 
 ```
 POST /api/party/location → UpdateLocationWorkflow → updateLocation activity → Update JSON
 ```
-*iOS app automatically sends location updates when you move >50 meters*
+*iOS app automatically sends location updates when you move >50m AND 60+ seconds have passed*
 
 **GetPartyStateWorkflow** - Query current state
 ```
@@ -226,12 +265,13 @@ All workflows complete immediately. Activities handle JSON file storage.
 ## Key Files
 
 **Swift Temporal SDK Integration:**
-- [Sources/App/configure.swift](Sources/App/configure.swift) - Client and worker setup
-- [Sources/App/Workflows/](Sources/App/Workflows/) - Workflow definitions
-- [Sources/App/Activities/PartyActivities.swift](Sources/App/Activities/PartyActivities.swift) - Activity definitions
+- [server/Sources/App/configure.swift](server/Sources/App/configure.swift) - Client and worker setup
+- [server/Sources/App/Workflows/](server/Sources/App/Workflows/) - Workflow definitions
+- [server/Sources/App/Activities/PartyActivities.swift](server/Sources/App/Activities/PartyActivities.swift) - Activity definitions
 
 **HTTP API:**
-- [Sources/App/routes.swift](Sources/App/routes.swift) - Vapor routes triggering workflows
+- [server/Sources/App/routes.swift](server/Sources/App/routes.swift) - Vapor routes triggering workflows
+- [server/Sources/App/Middleware/](server/Sources/App/Middleware/) - Auth and rate limiting
 
 ## Debugging
 

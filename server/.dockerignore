@@ -1,0 +1,37 @@
+# Build artifacts
+.build/
+build/
+.swiftpm/
+Package.resolved
+
+# Git
+.git/
+.gitignore
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+/tmp/
+
+# Xcode
+DerivedData/
+xcuserdata/
+*.xcworkspace
+*.xcodeproj
+
+# iOS App (not needed in server container)
+app/
+
+# Environment (should be passed at runtime)
+.env
+
+# Documentation
+README.md
+LICENSE
+CONTRIBUTING.md
+SECURITY.md
+
+# Temporal state
+party-state.json

@@ -11,10 +11,17 @@ class LocationManager: NSObject, ObservableObject {
     override init() {
         super.init()
         locationManager.delegate = self
-        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        // Use NearestTenMeters for good accuracy with reasonable battery life
+        // Perfect for NYC - distinguishes between nearby venues without Best's battery drain
+        locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
         locationManager.allowsBackgroundLocationUpdates = true
-        locationManager.pausesLocationUpdatesAutomatically = false
+        // Let system pause updates automatically to save battery
+        locationManager.pausesLocationUpdatesAutomatically = true
         locationManager.showsBackgroundLocationIndicator = true
+        // Only get updates when moved at least 50 meters
+        locationManager.distanceFilter = 50
+        // Optimize for minimal battery usage
+        locationManager.activityType = .otherNavigation
     }
 
     func requestPermission() {
@@ -33,6 +40,8 @@ class LocationManager: NSObject, ObservableObject {
             requestPermission()
             return
         }
+
+        // Use regular updates with distance filter (50m)
         locationManager.startUpdatingLocation()
 
         // Request "Always" permission if only have "When In Use"

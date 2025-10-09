@@ -28,13 +28,11 @@ struct PartyActivities {
 
     // MARK: - Activities
 
-    /// Records when the party starts (updates database).
+    /// Records when the party starts (updates state file).
     @Activity
     func recordPartyStart(input: RecordPartyStartInput) async throws {
         print("🎉 Party started at lat: \(input.location.lat), lng: \(input.location.lng) at \(input.startTime)")
 
-        // TODO: Update SQLite database
-        // For now, just write to a file as a simple state store
         let state = PartyState(
             isPartying: true,
             location: input.location,
@@ -43,13 +41,12 @@ struct PartyActivities {
         try saveState(state)
     }
 
-    /// Records when the party ends (updates database).
+    /// Records when the party ends (clears state file).
     @Activity
     func recordPartyEnd(input: RecordPartyEndInput) async throws {
         let duration = input.endTime.timeIntervalSince(input.startTime)
         print("🛑 Party ended. Duration: \(duration) seconds")
 
-        // Delete the state file to clear all data
         let url = stateFileURL()
         if FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
@@ -57,11 +54,9 @@ struct PartyActivities {
         }
     }
 
-    /// Queries the current party state from database.
+    /// Queries the current party state from state file.
     @Activity
     func getPartyState(input: ()) async throws -> GetPartyStateOutput {
-        // TODO: Query SQLite database
-        // For now, read from file
         let state = try loadState()
         return GetPartyStateOutput(
             isPartying: state.isPartying,
@@ -70,7 +65,7 @@ struct PartyActivities {
         )
     }
 
-    /// Updates the party location (updates database).
+    /// Updates the party location (updates state file).
     @Activity
     func updateLocation(input: UpdateLocationInput) async throws {
         print("📍 Location updated to lat: \(input.location.lat), lng: \(input.location.lng)")

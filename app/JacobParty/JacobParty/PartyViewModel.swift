@@ -41,28 +41,28 @@ class PartyViewModel: ObservableObject {
     }
 
     private func setupLocationObserver() {
-        // Track last sent location to avoid sending redundant updates
-        var lastSentLocation: CLLocationCoordinate2D?
+        // Track last sent time to ensure minimum 1 minute between updates
+        var lastSentTime: Date?
 
-        // Observe location changes and send updates when location changes significantly
+        // Location manager already filters by 50m distance via distanceFilter
+        // Just add time-based throttling here
         locationCancellable = locationManager.$currentLocation
             .compactMap { $0 }
-            .removeDuplicates { loc1, loc2 in
-                // Consider locations duplicate if within ~50 meters
-                let distance = self.distance(from: loc1, to: loc2)
-                return distance < 50
-            }
-            .debounce(for: .seconds(5), scheduler: DispatchQueue.main)
             .sink { [weak self] newLocation in
                 guard let self = self, self.isPartyMode else { return }
 
-                // Check if this location is significantly different from last sent
-                if let last = lastSentLocation {
-                    let dist = self.distance(from: last, to: newLocation)
-                    guard dist >= 50 else { return }
+                let now = Date()
+
+                // Enforce 60-second minimum between updates to reduce battery drain
+                if let lastTime = lastSentTime {
+                    let timeSinceLastUpdate = now.timeIntervalSince(lastTime)
+                    guard timeSinceLastUpdate >= 60 else {
+                        print("⏭️ Skipping update - only \(Int(timeSinceLastUpdate))s since last update")
+                        return
+                    }
                 }
 
-                lastSentLocation = newLocation
+                lastSentTime = now
 
                 Task {
                     do {

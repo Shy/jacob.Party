@@ -5,11 +5,13 @@ SwiftUI iPhone app with 3D party button, background location tracking, and 6-hou
 ## Features
 
 - ✅ **3D Party Button** - SceneKit-powered interactive button with press animation
-- ✅ **Location Tracking** - Background GPS tracking while partying
+- ✅ **Battery-Efficient Location** - Smart GPS tracking (10m accuracy, 50m distance filter, auto-pause)
+- ✅ **Smart Updates** - Only sends location when moved >50m AND 60+ seconds elapsed
 - ✅ **6-Hour Timeout** - Automatic notification after 6 hours with option to continue
 - ✅ **Haptic Feedback** - Satisfying tactile response on button press
 - ✅ **Network Integration** - Full HTTP API integration with Vapor server
 - ✅ **State Synchronization** - Fetches initial state from server on launch
+- ✅ **Device Authentication** - Secure device-based authentication with Keychain UUID storage
 
 ## Project Structure
 
@@ -48,8 +50,11 @@ The app communicates with the Vapor server at `http://127.0.0.1:8080`:
 
 **Endpoints Used:**
 - `GET /api/state` - Fetch current party state on launch
-- `POST /api/party/start` - Start party with location
-- `POST /api/party/stop` - Stop party
+- `POST /api/party/start` - Start party with location (includes device UUID)
+- `POST /api/party/location` - Update location during party (includes device UUID)
+- `POST /api/party/stop` - Stop party (includes device UUID)
+
+All protected endpoints require `X-Device-ID` header with the device's Keychain UUID.
 
 **To Change Server URL:**
 Edit [PartyViewModel.swift](JacobParty/PartyViewModel.swift#L13):
@@ -67,11 +72,15 @@ Configured in [Info.plist](JacobParty/Info.plist):
 
 ## How It Works
 
-1. **Launch**: App fetches initial state from server
+1. **Launch**: App fetches initial state from server using device UUID
 2. **Start Party**: Tap button → sends location to server via Temporal workflow
-3. **Background Tracking**: GPS continues updating even when app is backgrounded
-4. **6-Hour Timer**: Notification appears after 6 hours
-5. **Notification Actions**:
+3. **Smart Location Updates**:
+   - GPS tracks with 10m accuracy and 50m distance filter
+   - Updates sent only when: moved >50m AND 60+ seconds elapsed
+   - Auto-pauses when stationary to save battery
+4. **Background Tracking**: GPS continues updating even when app is backgrounded
+5. **6-Hour Timer**: Notification appears after 6 hours
+6. **Notification Actions**:
    - "Keep Partying" → Reschedules for 6 more hours
    - "Stop Party" → Ends party immediately
    - Tap notification → Auto-stops party
@@ -89,5 +98,3 @@ Configured in [Info.plist](JacobParty/Info.plist):
 - iOS 15.0+
 - Xcode 16.0+
 - Swift 6.0+
-
-Built for jacob.party! 🎉

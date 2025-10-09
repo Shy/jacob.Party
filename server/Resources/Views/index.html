@@ -391,6 +391,9 @@
         let fullscreenMarker = null;
         let lastState = null;
         let partyStartTime = null;
+        let pollInterval = 10000; // Start at 10 seconds
+        let consecutiveNoChanges = 0;
+        let pollTimer = null;
 
         // Create animated particles
         function createParticles() {
@@ -556,6 +559,49 @@
             return 'Location';
         }
 
+        function stateChanged(oldState, newState) {
+            if (!oldState) return true;
+            if (oldState.spinning !== newState.spinning) return true;
+            if (oldState.spinning && newState.spinning) {
+                // Check if location changed significantly (>10 meters)
+                if (oldState.location && newState.location) {
+                    const latDiff = Math.abs(oldState.location.lat - newState.location.lat);
+                    const lngDiff = Math.abs(oldState.location.lng - newState.location.lng);
+                    // ~0.0001 degrees = ~11 meters
+                    if (latDiff > 0.0001 || lngDiff > 0.0001) return true;
+                }
+            }
+            return false;
+        }
+
+        function adjustPollInterval() {
+            if (stateChanged(lastState, lastState)) {
+                // State changed - reset to fast polling
+                consecutiveNoChanges = 0;
+                pollInterval = 10000; // 10 seconds
+            } else {
+                // No change - back off
+                consecutiveNoChanges++;
+
+                if (consecutiveNoChanges >= 3 && pollInterval < 30000) {
+                    pollInterval = 30000; // 30 seconds after 3 no-changes
+                } else if (consecutiveNoChanges >= 6 && pollInterval < 60000) {
+                    pollInterval = 60000; // 1 minute after 6 no-changes
+                } else if (consecutiveNoChanges >= 12 && pollInterval < 120000) {
+                    pollInterval = 120000; // 2 minutes after 12 no-changes
+                }
+            }
+        }
+
+        function scheduleNextPoll() {
+            if (pollTimer) {
+                clearTimeout(pollTimer);
+            }
+            pollTimer = setTimeout(() => {
+                checkPartyStatus();
+            }, pollInterval);
+        }
+
         async function checkPartyStatus() {
             try {
                 const response = await fetch('/api/state');
@@ -563,6 +609,9 @@
                 const card = document.getElementById('party-card');
                 const statusEmoji = document.getElementById('status-emoji');
                 const statusText = document.getElementById('status-text');
+
+                // Check if state changed
+                const changed = stateChanged(lastState, data);
 
                 if (data.spinning && data.location) {
                     // Partying state
@@ -590,9 +639,33 @@
                     partyStartTime = null;
                 }
 
+                // Update state tracking
+                if (changed) {
+                    consecutiveNoChanges = 0;
+                    pollInterval = 10000; // Reset to 10 seconds
+                } else {
+                    consecutiveNoChanges++;
+
+                    // Exponential backoff
+                    if (consecutiveNoChanges >= 3 && pollInterval < 30000) {
+                        pollInterval = 30000; // 30 seconds
+                        console.log('📉 Backing off polling to 30s');
+                    } else if (consecutiveNoChanges >= 6 && pollInterval < 60000) {
+                        pollInterval = 60000; // 1 minute
+                        console.log('📉 Backing off polling to 60s');
+                    } else if (consecutiveNoChanges >= 12 && pollInterval < 120000) {
+                        pollInterval = 120000; // 2 minutes
+                        console.log('📉 Backing off polling to 2m');
+                    }
+                }
+
                 lastState = data;
+                scheduleNextPoll();
             } catch (error) {
                 console.error('Error fetching party status:', error);
+                // On error, back off aggressively
+                pollInterval = Math.min(pollInterval * 2, 120000);
+                scheduleNextPoll();
             }
         }
 
@@ -602,13 +675,31 @@
 
         // Initialize
         createParticles();
-        checkPartyStatus();
-
-        // Poll every 5 seconds
-        setInterval(checkPartyStatus, 10000);
+        checkPartyStatus(); // First check happens immediately
 
         // Update time display every 30 seconds
         setInterval(updateTimeDisplay, 30000);
+
+        // Only poll when page is visible/in focus
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                // Tab became visible - resume polling
+                console.log('👀 Tab visible - resuming polling');
+                consecutiveNoChanges = 0;
+                pollInterval = 10000;
+                if (pollTimer) {
+                    clearTimeout(pollTimer);
+                }
+                checkPartyStatus();
+            } else {
+                // Tab hidden - stop polling to save resources
+                console.log('🛌 Tab hidden - pausing polling');
+                if (pollTimer) {
+                    clearTimeout(pollTimer);
+                    pollTimer = null;
+                }
+            }
+        });
     </script>
 </body>
 

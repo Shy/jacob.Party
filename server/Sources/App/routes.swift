@@ -6,6 +6,9 @@ func routes(_ app: Application) throws {
     // Create protected routes group with device authentication
     let protected = app.grouped(DeviceAuthMiddleware())
 
+    // Create rate-limited group for state endpoint (30 requests per minute)
+    let rateLimited = app.grouped(RateLimitMiddleware(maxRequests: 30, windowSeconds: 60))
+
     // Serve index.html with dynamic configuration injected (public)
     app.get { req async throws -> Response in
         let htmlPath = "Resources/Views/index.html"
@@ -25,8 +28,8 @@ func routes(_ app: Application) throws {
         )
     }
 
-    // API endpoint to query workflow state (public - read-only)
-    app.get("api", "state") { req async throws -> PartyStateResponse in
+    // API endpoint to query workflow state (public - read-only with rate limiting)
+    rateLimited.get("api", "state") { req async throws -> PartyStateResponse in
         guard let client = req.application.storage[ClientKey.self] else {
             throw Abort(.internalServerError, reason: "Temporal client not configured")
         }
