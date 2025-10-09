@@ -16,11 +16,29 @@ public func configure(_ app: Application) async throws {
     let temporalNamespace = Environment.get("TEMPORAL_NAMESPACE") ?? "default"
     let temporalTaskQueue = Environment.get("TEMPORAL_TASK_QUEUE") ?? "party-queue"
     let tlsEnabled = Environment.get("TEMPORAL_TLS_ENABLED")?.lowercased() == "true"
-    let clientCertPath = Environment.get("TEMPORAL_CLIENT_CERT")
-    let clientKeyPath = Environment.get("TEMPORAL_CLIENT_KEY")
     let googleMapsApiKey = Environment.get("GOOGLE_MAPS_API_KEY") ?? ""
     let serverHost = Environment.get("SERVER_HOST") ?? "0.0.0.0"
     let serverPort = Int(Environment.get("SERVER_PORT") ?? "8080") ?? 8080
+
+    // Get certificate paths (check both file paths and content from env vars)
+    var clientCertPath = Environment.get("TEMPORAL_CLIENT_CERT")
+    var clientKeyPath = Environment.get("TEMPORAL_CLIENT_KEY")
+
+    // If certificate contents are provided as env vars (Digital Ocean), write them to temp files
+    if let certContent = Environment.get("TEMPORAL_CLIENT_CERT_CONTENT"),
+       let keyContent = Environment.get("TEMPORAL_CLIENT_KEY_CONTENT") {
+        let tmpDir = FileManager.default.temporaryDirectory
+        let certFile = tmpDir.appendingPathComponent("client.pem")
+        let keyFile = tmpDir.appendingPathComponent("client.key")
+
+        try certContent.write(to: certFile, atomically: true, encoding: .utf8)
+        try keyContent.write(to: keyFile, atomically: true, encoding: .utf8)
+
+        clientCertPath = certFile.path
+        clientKeyPath = keyFile.path
+
+        logger.info("📝 Wrote certificates from environment variables to temporary files")
+    }
 
     // Store configuration for routes
     app.storage[AppNameKey.self] = appName
