@@ -14,6 +14,7 @@ class DeviceIdentifier {
     var uuid: String {
         // Try to load existing UUID from keychain
         if let existingUUID = loadFromKeychain() {
+            print("🔑 Device UUID (from keychain): \(existingUUID)")
             return existingUUID
         }
 

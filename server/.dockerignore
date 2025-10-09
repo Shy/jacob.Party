@@ -1,37 +1,96 @@
-# Build artifacts
+# Build artifacts (don't copy to Docker build context)
 .build/
 build/
+*.xcarchive
+DerivedData/
+
+# Swift Package Manager
 .swiftpm/
-Package.resolved
+# Note: Package.resolved is intentionally NOT ignored (needed for reproducible builds)
 
 # Git
 .git/
 .gitignore
-
-# macOS
-.DS_Store
-
-# Logs
-*.log
-/tmp/
+.gitattributes
 
 # Xcode
-DerivedData/
 xcuserdata/
+*.xcuserstate
 *.xcworkspace
 *.xcodeproj
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
 
 # iOS App (not needed in server container)
 app/
 
-# Environment (should be passed at runtime)
+# Environment files (secrets should be in env vars, not copied)
 .env
+.env.*
+*.env
 
-# Documentation
-README.md
-LICENSE
-CONTRIBUTING.md
-SECURITY.md
+# Logs
+*.log
+logs/
 
-# Temporal state
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Documentation (not needed in container)
+*.md
+README*
+CHANGELOG*
+LICENSE*
+docs/
+
+# Test files (already excluded in build, but save transfer time)
+Tests/
+*Tests/
+*.test
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Docker files (don't need to copy these into the build)
+docker-compose.yml
+docker-compose.*.yml
+
+# Database files (should be external)
+*.db
+*.sqlite
+*.sqlite3
 party-state.json
+*.json.tmp
+
+# Certificates (should be passed via env vars)
+certs/
+*.pem
+*.key
+*.crt
+*.cer
+
+# Coverage reports
+coverage/
+*.coverage
+*.profdata

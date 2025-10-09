@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
+		92C5B8DC2E956D5B00074083 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
 		92F56CF12E945D4900A8D3E0 /* JacobParty.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JacobParty.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -45,6 +46,7 @@
 		92F56CE82E945D4900A8D3E0 = {
 			isa = PBXGroup;
 			children = (
+				92C5B8DC2E956D5B00074083 /* Config.xcconfig */,
 				92F56CF32E945D4900A8D3E0 /* JacobParty */,
 				92F56CF22E945D4900A8D3E0 /* Products */,
 			);
@@ -261,6 +263,7 @@
 		};
 		92F56CFD2E945D4A00A8D3E0 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 92C5B8DC2E956D5B00074083 /* Config.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -295,6 +298,7 @@
 		};
 		92F56CFE2E945D4A00A8D3E0 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 92C5B8DC2E956D5B00074083 /* Config.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

@@ -3,6 +3,30 @@ import Temporal
 import Logging
 
 func routes(_ app: Application) throws {
+    // Health check endpoint (for monitoring/load balancers)
+    app.get("health") { req async -> HTTPStatus in
+        // Check if Temporal client and worker are initialized
+        guard req.application.storage[ClientKey.self] != nil,
+              req.application.storage[WorkerKey.self] != nil else {
+            throw Abort(.serviceUnavailable, reason: "Temporal not initialized")
+        }
+        return .ok
+    }
+
+    // Readiness check endpoint (more detailed)
+    app.get("ready") { req async -> HealthResponse in
+        let hasClient = req.application.storage[ClientKey.self] != nil
+        let hasWorker = req.application.storage[WorkerKey.self] != nil
+        let isReady = hasClient && hasWorker
+
+        return HealthResponse(
+            status: isReady ? "ready" : "not ready",
+            temporalClient: hasClient ? "connected" : "disconnected",
+            temporalWorker: hasWorker ? "running" : "stopped",
+            timestamp: ISO8601DateFormatter().string(from: Date())
+        )
+    }
+
     // Create protected routes group with device authentication
     let protected = app.grouped(DeviceAuthMiddleware())
 
@@ -151,6 +175,13 @@ func routes(_ app: Application) throws {
 }
 
 // MARK: - Request/Response Models
+
+struct HealthResponse: Content {
+    let status: String
+    let temporalClient: String
+    let temporalWorker: String
+    let timestamp: String
+}
 
 struct StartPartyRequest: Content {
     let location: Location

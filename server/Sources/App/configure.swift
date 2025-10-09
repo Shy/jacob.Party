@@ -4,7 +4,8 @@ import Logging
 import Foundation
 
 public func configure(_ app: Application) async throws {
-    let logger = Logger(label: "vapor-app")
+    var logger = Logger(label: "jacob-party-app")
+    logger.logLevel = .info
 
     // Load environment variables from .env file
     loadEnvFile()
@@ -53,9 +54,11 @@ public func configure(_ app: Application) async throws {
     app.storage[AllowedDeviceIDsKey.self] = allowedDeviceIDs
 
     if allowedDeviceIDs.isEmpty {
-        logger.warning("⚠️ No device whitelist configured - all devices will be allowed")
+        logger.warning("⚠️  No device whitelist configured - all devices will be allowed")
     } else {
-        logger.info("🔒 Device whitelist enabled with \(allowedDeviceIDs.count) allowed device(s)")
+        logger.info("🔒 Device whitelist enabled", metadata: [
+            "device_count": "\(allowedDeviceIDs.count)"
+        ])
     }
 
     // Determine if using TLS and create client/worker accordingly
@@ -65,11 +68,13 @@ public func configure(_ app: Application) async throws {
             throw Abort(.internalServerError, reason: "TLS enabled but certificate paths missing")
         }
 
-        logger.info("🔐 Connecting to Temporal Cloud with mTLS")
-        logger.info("   Host: \(temporalHost)")
-        logger.info("   Namespace: \(temporalNamespace)")
-        logger.info("   Certificate: \(certPath)")
-        logger.info("   Key: \(keyPath)")
+        logger.info("🔐 Connecting to Temporal Cloud with mTLS", metadata: [
+            "host": "\(temporalHost)",
+            "port": "\(temporalPort)",
+            "namespace": "\(temporalNamespace)",
+            "task_queue": "\(temporalTaskQueue)",
+            "cert_path": "\(certPath)"
+        ])
 
         // Create Temporal Client with mTLS using DNS (for cloud hostnames)
         let client = try TemporalClient(
@@ -109,8 +114,11 @@ public func configure(_ app: Application) async throws {
         app.storage[WorkerKey.self] = worker
     } else {
         // Local development with plaintext
-        logger.info("⚠️ Using plaintext connection (local development)")
-        logger.info("   Host: \(temporalHost):\(temporalPort)")
+        logger.warning("⚠️  Using plaintext connection (local development)", metadata: [
+            "host": "\(temporalHost)",
+            "port": "\(temporalPort)",
+            "namespace": "\(temporalNamespace)"
+        ])
 
         let client = try TemporalClient(
             target: .ipv4(address: temporalHost, port: temporalPort),
@@ -162,7 +170,13 @@ public func configure(_ app: Application) async throws {
     // Register routes
     try routes(app)
 
-    logger.info("🚀 Vapor server configured with Temporal worker")
+    logger.info("🚀 Server ready", metadata: [
+        "app_name": "\(appName)",
+        "host": "\(serverHost)",
+        "port": "\(serverPort)",
+        "temporal_connected": "true",
+        "worker_running": "true"
+    ])
 }
 
 struct ClientKey: StorageKey {

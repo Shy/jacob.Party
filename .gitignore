@@ -10,7 +10,7 @@ build/
 
 # Swift Package Manager
 .swiftpm/
-Package.resolved
+# Package.resolved is tracked for reproducible builds
 
 # Xcode
 xcuserdata/

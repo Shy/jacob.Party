@@ -11,12 +11,23 @@ class PartyViewModel: ObservableObject {
     private let feedbackGenerator = UIImpactFeedbackGenerator(style: .heavy)
     private let locationManager = LocationManager()
     private let notificationManager = NotificationManager.shared
-    private let baseURL = "http://127.0.0.1:8080"
+    private let baseURL: String = {
+        guard let serverURL = Bundle.main.object(forInfoDictionaryKey: "SERVER_URL") as? String,
+              !serverURL.isEmpty,
+              !serverURL.contains("$(") else {
+            // Fallback to localhost for development
+            return "http://127.0.0.1:8080"
+        }
+        return serverURL
+    }()
     private var locationCancellable: AnyCancellable?
     private let deviceID = DeviceIdentifier.shared.uuid
 
     init() {
         feedbackGenerator.prepare()
+
+        // Print device ID for easy identification
+        print("🔑 Device ID: \(deviceID)")
 
         // Setup notification observers
         setupNotificationObservers()
