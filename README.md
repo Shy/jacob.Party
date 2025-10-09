@@ -69,7 +69,7 @@ The app consists of three components that all communicate through Temporal:
 
 ## Prerequisites
 
-- Swift 6.0+
+- Swift 6.2+
 - Xcode 16+ (for iOS app)
 - Temporal Server (local) or Temporal Cloud account
 

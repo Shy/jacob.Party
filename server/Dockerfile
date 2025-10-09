@@ -36,10 +36,11 @@ RUN swift build \
     -Xswiftc -enforce-exclusivity=unchecked \
     --build-tests disable
 
-# Runtime stage - much smaller image
-FROM ubuntu:noble-20241009
+# Runtime stage - uses Swift runtime image (has Swift libs but not compiler)
+# This is much smaller than the builder image (~600MB vs ~1.5GB)
+FROM swift:6.2-noble-slim
 
-# Install only runtime dependencies
+# Install only runtime dependencies not included in swift-slim
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -47,6 +48,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     libcurl4 \
     libxml2 \
     tzdata \
+    curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 

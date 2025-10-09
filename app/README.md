@@ -97,4 +97,4 @@ Configured in [Info.plist](JacobParty/Info.plist):
 
 - iOS 15.0+
 - Xcode 16.0+
-- Swift 6.0+
+- Swift 6.2+
