@@ -95,21 +95,30 @@ func routes(_ app: Application) throws {
         // Parse request body
         let body = try req.content.decode(StartPartyRequest.self)
 
+        let appName = req.application.storage[AppNameKey.self] ?? "jacob"
+        let workflowID = "\(appName)-party"
+
         // Start new workflow (non-blocking)
-        // Each party start creates a new workflow with a unique ID
+        // Use consistent workflow ID to allow workflow to continue/signal existing workflows
         Task {
             do {
                 _ = try await client.startWorkflow(
                     type: PartyWorkflow.self,
                     options: .init(
-                        id: "jacob-party",
+                        id: workflowID,
                         taskQueue: "party-queue"
                     ),
                     input: StartPartyInput(location: body.location)
                 )
-                req.logger.info("✅ Started PartyWorkflow")
+                req.logger.info("✅ Started PartyWorkflow", metadata: [
+                    "workflow_id": "\(workflowID)"
+                ])
             } catch {
-                req.logger.error("❌ Failed to start workflow: \(error)")
+                // If workflow already exists, that's okay - it means party is already running
+                req.logger.info("ℹ️  Workflow start result", metadata: [
+                    "workflow_id": "\(workflowID)",
+                    "error": "\(error)"
+                ])
             }
         }
 

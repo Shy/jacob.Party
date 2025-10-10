@@ -3,12 +3,56 @@ import Temporal
 import Logging
 import Foundation
 
+// Storage for cleanup and graceful shutdown
+struct CertCleanupKey: StorageKey {
+    typealias Value = CertificateCleanup
+}
+
+struct TaskManagerKey: StorageKey {
+    typealias Value = TaskManager
+}
+
+final class CertificateCleanup: @unchecked Sendable {
+    var certPath: String?
+    var keyPath: String?
+
+    func cleanup() {
+        if let certPath = certPath {
+            try? FileManager.default.removeItem(atPath: certPath)
+        }
+        if let keyPath = keyPath {
+            try? FileManager.default.removeItem(atPath: keyPath)
+        }
+    }
+}
+
+final class TaskManager: @unchecked Sendable {
+    private var tasks: [Task<Void, Never>] = []
+    private var isCancelled = false
+
+    func add(_ task: Task<Void, Never>) {
+        guard !isCancelled else { return }
+        tasks.append(task)
+    }
+
+    func cancelAll() {
+        isCancelled = true
+        for task in tasks {
+            task.cancel()
+        }
+        tasks.removeAll()
+    }
+}
+
 public func configure(_ app: Application) async throws {
     var logger = Logger(label: "jacob-party-app")
     logger.logLevel = .info
 
     // Load environment variables from .env file
     loadEnvFile()
+
+    // Validate required environment variables
+    try validateEnvironment(logger: logger)
 
     // Get configuration from environment
     let appName = Environment.get("APP_NAME") ?? "jacob"
@@ -20,6 +64,14 @@ public func configure(_ app: Application) async throws {
     let googleMapsApiKey = Environment.get("GOOGLE_MAPS_API_KEY") ?? ""
     let serverHost = Environment.get("SERVER_HOST") ?? "0.0.0.0"
     let serverPort = Int(Environment.get("SERVER_PORT") ?? "8080") ?? 8080
+
+    // Initialize task manager for graceful shutdown
+    let taskManager = TaskManager()
+    app.storage[TaskManagerKey.self] = taskManager
+
+    // Initialize certificate cleanup
+    let certCleanup = CertificateCleanup()
+    app.storage[CertCleanupKey.self] = certCleanup
 
     // Get certificate paths (check both file paths and content from env vars)
     var clientCertPath = Environment.get("TEMPORAL_CLIENT_CERT")
@@ -37,6 +89,10 @@ public func configure(_ app: Application) async throws {
 
         clientCertPath = certFile.path
         clientKeyPath = keyFile.path
+
+        // Register for cleanup
+        certCleanup.certPath = clientCertPath
+        certCleanup.keyPath = clientKeyPath
 
         logger.info("📝 Wrote certificates from environment variables to temporary files")
     }
@@ -149,19 +205,78 @@ public func configure(_ app: Application) async throws {
         app.storage[WorkerKey.self] = worker
     }
 
-    // Start client and worker in background
+    // Start client and worker in background with proper error handling
     guard let client = app.storage[ClientKey.self],
           let worker = app.storage[WorkerKey.self] else {
         throw Abort(.internalServerError, reason: "Client or worker not initialized")
     }
 
-    Task {
-        try await client.run()
-    }
+    // Start Temporal client first with retry logic
+    let clientTask = Task {
+        var retryCount = 0
+        let maxRetries = 3
 
-    Task {
-        try await worker.run()
+        while retryCount < maxRetries && !Task.isCancelled {
+            do {
+                logger.info("🔌 Starting Temporal client...", metadata: [
+                    "attempt": "\(retryCount + 1)"
+                ])
+                try await client.run()
+                logger.info("✅ Temporal client connected successfully")
+                break
+            } catch {
+                retryCount += 1
+                logger.error("❌ Temporal client failed", metadata: [
+                    "error": "\(error)",
+                    "error_type": "\(type(of: error))",
+                    "attempt": "\(retryCount)",
+                    "max_retries": "\(maxRetries)"
+                ])
+
+                if retryCount < maxRetries && !Task.isCancelled {
+                    let backoff = Duration.seconds(min(retryCount * 2, 10))
+                    logger.info("⏳ Retrying in \(backoff.components.seconds)s...")
+                    try? await Task.sleep(for: backoff)
+                }
+            }
+        }
     }
+    taskManager.add(clientTask)
+
+    // Start worker after a brief delay to ensure client is initialized
+    let workerTask = Task {
+        var retryCount = 0
+        let maxRetries = 3
+
+        // Give client time to initialize
+        try? await Task.sleep(for: .milliseconds(500))
+
+        while retryCount < maxRetries && !Task.isCancelled {
+            do {
+                logger.info("👷 Starting Temporal worker...", metadata: [
+                    "attempt": "\(retryCount + 1)"
+                ])
+                try await worker.run()
+                logger.info("✅ Temporal worker running successfully")
+                break
+            } catch {
+                retryCount += 1
+                logger.error("❌ Temporal worker failed", metadata: [
+                    "error": "\(error)",
+                    "error_type": "\(type(of: error))",
+                    "attempt": "\(retryCount)",
+                    "max_retries": "\(maxRetries)"
+                ])
+
+                if retryCount < maxRetries && !Task.isCancelled {
+                    let backoff = Duration.seconds(min(retryCount * 2, 10))
+                    logger.info("⏳ Retrying in \(backoff.components.seconds)s...")
+                    try? await Task.sleep(for: backoff)
+                }
+            }
+        }
+    }
+    taskManager.add(workerTask)
 
     // Configure HTTP server
     app.http.server.configuration.hostname = serverHost
@@ -169,6 +284,11 @@ public func configure(_ app: Application) async throws {
 
     // Register routes
     try routes(app)
+
+    // Register shutdown handler
+    app.lifecycle.use(
+        GracefulShutdownHandler(taskManager: taskManager, certCleanup: certCleanup, logger: logger)
+    )
 
     logger.info("🚀 Server ready", metadata: [
         "app_name": "\(appName)",
@@ -193,6 +313,72 @@ struct AppNameKey: StorageKey {
 
 struct GoogleMapsApiKeyKey: StorageKey {
     typealias Value = String
+}
+
+// MARK: - Graceful Shutdown Handler
+
+struct GracefulShutdownHandler: LifecycleHandler {
+    let taskManager: TaskManager
+    let certCleanup: CertificateCleanup
+    let logger: Logger
+
+    func shutdown(_ application: Application) async throws {
+        logger.info("🛑 Shutting down gracefully...")
+
+        // Cancel all background tasks
+        taskManager.cancelAll()
+
+        // Clean up temporary certificate files
+        certCleanup.cleanup()
+
+        logger.info("✅ Shutdown complete")
+    }
+
+    func willBoot(_ application: Application) throws {
+        // Nothing to do on boot
+    }
+
+    func didBoot(_ application: Application) throws {
+        // Nothing to do after boot
+    }
+
+    func shutdownWait(_ application: Application) async throws {
+        // Use default wait behavior
+    }
+}
+
+// MARK: - Environment Validation
+
+func validateEnvironment(logger: Logger) throws {
+    // Check if TLS is enabled and validate certificate configuration
+    let tlsEnabled = Environment.get("TEMPORAL_TLS_ENABLED")?.lowercased() == "true"
+
+    if tlsEnabled {
+        let hasCertPath = Environment.get("TEMPORAL_CLIENT_CERT") != nil
+        let hasKeyPath = Environment.get("TEMPORAL_CLIENT_KEY") != nil
+        let hasCertContent = Environment.get("TEMPORAL_CLIENT_CERT_CONTENT") != nil
+        let hasKeyContent = Environment.get("TEMPORAL_CLIENT_KEY_CONTENT") != nil
+
+        // Must have either file paths or content, not mix
+        if !(hasCertPath && hasKeyPath) && !(hasCertContent && hasKeyContent) {
+            logger.error("❌ TLS enabled but certificate configuration incomplete")
+            throw Abort(.internalServerError,
+                       reason: "TLS enabled but missing certificate configuration. " +
+                              "Provide either (TEMPORAL_CLIENT_CERT + TEMPORAL_CLIENT_KEY) or " +
+                              "(TEMPORAL_CLIENT_CERT_CONTENT + TEMPORAL_CLIENT_KEY_CONTENT)")
+        }
+
+        logger.info("✅ TLS configuration validated")
+    }
+
+    // Validate Temporal host is set for cloud deployments
+    if tlsEnabled, let host = Environment.get("TEMPORAL_HOST"), host.contains("temporal.io") {
+        if let namespace = Environment.get("TEMPORAL_NAMESPACE"), !namespace.isEmpty, namespace != "default" {
+            // Valid namespace for cloud
+        } else {
+            logger.warning("⚠️  Using default namespace with Temporal Cloud - this may not work")
+        }
+    }
 }
 
 // MARK: - Environment File Loader
