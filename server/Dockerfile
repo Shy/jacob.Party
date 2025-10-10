@@ -29,6 +29,11 @@ RUN useradd -m -u 1001 appuser && \
 # Switch to non-root user
 USER appuser
 
+# Set Swift runtime environment variables to improve stability
+ENV SWIFT_DETERMINISTIC_HASHING=1
+ENV SWIFT_BACKTRACE=enable=no
+ENV LIBDISPATCH_COOPERATIVE_POOL_STRICT=0
+
 EXPOSE 8080
 
 # Add health check
