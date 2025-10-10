@@ -4,7 +4,7 @@ import Logging
 
 func routes(_ app: Application) throws {
     // Health check endpoint (for monitoring/load balancers)
-    app.get("health") { req async -> HTTPStatus in
+    app.get("health") { req async throws -> HTTPStatus in
         // Check if Temporal client and worker are initialized
         guard req.application.storage[ClientKey.self] != nil,
               req.application.storage[WorkerKey.self] != nil else {
