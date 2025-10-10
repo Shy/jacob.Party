@@ -18,18 +18,22 @@ COPY Resources ./Resources
 # Build release with memory-conscious settings and cache mount
 RUN --mount=type=cache,target=/root/.swiftpm \
     --mount=type=cache,target=/root/.cache \
-    swift build -c release --jobs 1 --static-swift-stdlib
+    swift build -c release --jobs 1
 
 # Runtime stage - much smaller base image
 FROM ubuntu:24.04
 
-# Install only runtime dependencies
+# Install only runtime dependencies including Swift runtime and SSL libraries
 RUN apt-get update && \
     apt-get install -y \
     curl \
     ca-certificates \
     libicu74 \
     libxml2 \
+    libssl3 \
+    libcurl4 \
+    libatomic1 \
+    libc6 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
