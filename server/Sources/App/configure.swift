@@ -61,6 +61,7 @@ public func configure(_ app: Application) async throws {
     let temporalNamespace = Environment.get("TEMPORAL_NAMESPACE") ?? "default"
     let temporalTaskQueue = Environment.get("TEMPORAL_TASK_QUEUE") ?? "party-queue"
     let tlsEnabled = Environment.get("TEMPORAL_TLS_ENABLED")?.lowercased() == "true"
+    let temporalApiKey = Environment.get("TEMPORAL_API_KEY")
     let googleMapsApiKey = Environment.get("GOOGLE_MAPS_API_KEY") ?? ""
     let serverHost = Environment.get("SERVER_HOST") ?? "0.0.0.0"
     let serverPort = Int(Environment.get("SERVER_PORT") ?? "8080") ?? 8080
@@ -119,55 +120,85 @@ public func configure(_ app: Application) async throws {
 
     // Determine if using TLS and create client/worker accordingly
     if tlsEnabled {
-        guard let certPath = clientCertPath, let keyPath = clientKeyPath else {
-            logger.error("❌ TLS enabled but TEMPORAL_CLIENT_CERT or TEMPORAL_CLIENT_KEY not set")
-            throw Abort(.internalServerError, reason: "TLS enabled but certificate paths missing")
-        }
-
-        logger.info("🔐 Connecting to Temporal Cloud with mTLS", metadata: [
+        let authMethod = temporalApiKey != nil ? "API Key" : "mTLS"
+        logger.info("🔐 Connecting to Temporal Cloud", metadata: [
             "host": "\(temporalHost)",
             "port": "\(temporalPort)",
             "namespace": "\(temporalNamespace)",
             "task_queue": "\(temporalTaskQueue)",
-            "cert_path": "\(certPath)"
+            "auth_method": "\(authMethod)"
         ])
 
-        // Create Temporal Client with mTLS using DNS (for cloud hostnames)
-        let client = try TemporalClient(
-            target: .dns(host: temporalHost, port: temporalPort),
-            transportSecurity: .mTLS(
-                certificateChain: [.file(path: certPath, format: .pem)],
-                privateKey: .file(path: keyPath, format: .pem)
-            ),
-            configuration: .init(
+        // Create Client and Worker with appropriate transport security
+        // Supports both authentication methods:
+        // 1. mTLS (certificate-based) - if TEMPORAL_CLIENT_CERT/KEY are provided
+        // 2. API Key (simpler) - if only TEMPORAL_API_KEY is provided
+        // Both can be used together for maximum security (mTLS + API key)
+        if let certPath = clientCertPath, let keyPath = clientKeyPath {
+            // Use mTLS if certificates are available (supports API key too)
+            let client = try TemporalClient(
+                target: .dns(host: temporalHost, port: temporalPort),
+                transportSecurity: .mTLS(
+                    certificateChain: [.file(path: certPath, format: .pem)],
+                    privateKey: .file(path: keyPath, format: .pem)
+                ),
+                configuration: .init(
+                    instrumentation: .init(serverHostname: temporalHost),
+                    namespace: temporalNamespace,
+                    apiKey: temporalApiKey
+                ),
+                logger: logger
+            )
+            app.storage[ClientKey.self] = client
+
+            let workerConfig = TemporalWorker.Configuration(
+                namespace: temporalNamespace,
+                taskQueue: temporalTaskQueue,
                 instrumentation: .init(serverHostname: temporalHost),
-                namespace: temporalNamespace
-            ),
-            logger: logger
-        )
+                apiKey: temporalApiKey
+            )
+            let worker = try TemporalWorker(
+                configuration: workerConfig,
+                target: .dns(host: temporalHost, port: temporalPort),
+                transportSecurity: .mTLS(
+                    certificateChain: [.file(path: certPath, format: .pem)],
+                    privateKey: .file(path: keyPath, format: .pem)
+                ),
+                activityContainers: PartyActivities(),
+                workflows: [PartyWorkflow.self, GetPartyStateWorkflow.self, StopPartyWorkflow.self, UpdateLocationWorkflow.self],
+                logger: logger
+            )
+            app.storage[WorkerKey.self] = worker
+        } else {
+            // Use TLS without client certificates (API key auth only)
+            let client = try TemporalClient(
+                target: .dns(host: temporalHost, port: temporalPort),
+                transportSecurity: .tls,
+                configuration: .init(
+                    instrumentation: .init(serverHostname: temporalHost),
+                    namespace: temporalNamespace,
+                    apiKey: temporalApiKey
+                ),
+                logger: logger
+            )
+            app.storage[ClientKey.self] = client
 
-        app.storage[ClientKey.self] = client
-
-        // Configure Temporal Worker with mTLS
-        let workerConfig = TemporalWorker.Configuration(
-            namespace: temporalNamespace,
-            taskQueue: temporalTaskQueue,
-            instrumentation: .init(serverHostname: temporalHost)
-        )
-
-        let worker = try TemporalWorker(
-            configuration: workerConfig,
-            target: .dns(host: temporalHost, port: temporalPort),
-            transportSecurity: .mTLS(
-                certificateChain: [.file(path: certPath, format: .pem)],
-                privateKey: .file(path: keyPath, format: .pem)
-            ),
-            activityContainers: PartyActivities(),
-            workflows: [PartyWorkflow.self, GetPartyStateWorkflow.self, StopPartyWorkflow.self, UpdateLocationWorkflow.self],
-            logger: logger
-        )
-
-        app.storage[WorkerKey.self] = worker
+            let workerConfig = TemporalWorker.Configuration(
+                namespace: temporalNamespace,
+                taskQueue: temporalTaskQueue,
+                instrumentation: .init(serverHostname: temporalHost),
+                apiKey: temporalApiKey
+            )
+            let worker = try TemporalWorker(
+                configuration: workerConfig,
+                target: .dns(host: temporalHost, port: temporalPort),
+                transportSecurity: .tls,
+                activityContainers: PartyActivities(),
+                workflows: [PartyWorkflow.self, GetPartyStateWorkflow.self, StopPartyWorkflow.self, UpdateLocationWorkflow.self],
+                logger: logger
+            )
+            app.storage[WorkerKey.self] = worker
+        }
     } else {
         // Local development with plaintext
         logger.warning("⚠️  Using plaintext connection (local development)", metadata: [
@@ -180,7 +211,9 @@ public func configure(_ app: Application) async throws {
             target: .ipv4(address: temporalHost, port: temporalPort),
             transportSecurity: .plaintext,
             configuration: .init(
-                instrumentation: .init(serverHostname: temporalHost)
+                instrumentation: .init(serverHostname: temporalHost),
+                namespace: temporalNamespace,
+                apiKey: temporalApiKey
             ),
             logger: logger
         )
@@ -190,7 +223,8 @@ public func configure(_ app: Application) async throws {
         let workerConfig = TemporalWorker.Configuration(
             namespace: temporalNamespace,
             taskQueue: temporalTaskQueue,
-            instrumentation: .init(serverHostname: temporalHost)
+            instrumentation: .init(serverHostname: temporalHost),
+            apiKey: temporalApiKey
         )
 
         let worker = try TemporalWorker(
@@ -350,25 +384,33 @@ struct GracefulShutdownHandler: LifecycleHandler {
 // MARK: - Environment Validation
 
 func validateEnvironment(logger: Logger) throws {
-    // Check if TLS is enabled and validate certificate configuration
+    // Check if TLS is enabled and validate certificate/API key configuration
     let tlsEnabled = Environment.get("TEMPORAL_TLS_ENABLED")?.lowercased() == "true"
 
     if tlsEnabled {
+        let hasApiKey = Environment.get("TEMPORAL_API_KEY") != nil && !Environment.get("TEMPORAL_API_KEY")!.isEmpty
         let hasCertPath = Environment.get("TEMPORAL_CLIENT_CERT") != nil
         let hasKeyPath = Environment.get("TEMPORAL_CLIENT_KEY") != nil
         let hasCertContent = Environment.get("TEMPORAL_CLIENT_CERT_CONTENT") != nil
         let hasKeyContent = Environment.get("TEMPORAL_CLIENT_KEY_CONTENT") != nil
 
-        // Must have either file paths or content, not mix
-        if !(hasCertPath && hasKeyPath) && !(hasCertContent && hasKeyContent) {
-            logger.error("❌ TLS enabled but certificate configuration incomplete")
+        // Must have either API key OR certificates (file paths or content)
+        let hasCerts = (hasCertPath && hasKeyPath) || (hasCertContent && hasKeyContent)
+
+        if !hasApiKey && !hasCerts {
+            logger.error("❌ TLS enabled but authentication configuration incomplete")
             throw Abort(.internalServerError,
-                       reason: "TLS enabled but missing certificate configuration. " +
-                              "Provide either (TEMPORAL_CLIENT_CERT + TEMPORAL_CLIENT_KEY) or " +
-                              "(TEMPORAL_CLIENT_CERT_CONTENT + TEMPORAL_CLIENT_KEY_CONTENT)")
+                       reason: "TLS enabled but missing authentication. Provide one of:\n" +
+                              "  1. TEMPORAL_API_KEY (recommended), or\n" +
+                              "  2. TEMPORAL_CLIENT_CERT + TEMPORAL_CLIENT_KEY, or\n" +
+                              "  3. TEMPORAL_CLIENT_CERT_CONTENT + TEMPORAL_CLIENT_KEY_CONTENT")
         }
 
-        logger.info("✅ TLS configuration validated")
+        if hasApiKey {
+            logger.info("✅ TLS configuration validated (using API key authentication)")
+        } else {
+            logger.info("✅ TLS configuration validated (using mTLS certificate authentication)")
+        }
     }
 
     // Validate Temporal host is set for cloud deployments
@@ -386,9 +428,14 @@ func validateEnvironment(logger: Logger) throws {
 func loadEnvFile() {
     let fileManager = FileManager.default
     let currentPath = fileManager.currentDirectoryPath
-    let envPath = currentPath + "/.env"
 
-    guard fileManager.fileExists(atPath: envPath),
+    // Check current directory first, then parent directory
+    let envPaths = [
+        currentPath + "/.env",
+        currentPath + "/../.env"
+    ]
+
+    guard let envPath = envPaths.first(where: { fileManager.fileExists(atPath: $0) }),
           let contents = try? String(contentsOfFile: envPath, encoding: .utf8) else {
         return
     }

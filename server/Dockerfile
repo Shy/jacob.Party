@@ -38,6 +38,9 @@ RUN apt-get update && \
 
 WORKDIR /app
 
+# Copy Swift runtime libraries from builder (needed for Swift apps to run)
+COPY --from=builder /usr/lib/swift /usr/lib/swift
+
 # Copy the built binary from builder
 COPY --from=builder /app/.build/release/App /app/App
 
