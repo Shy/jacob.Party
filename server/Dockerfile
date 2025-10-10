@@ -1,9 +1,7 @@
-FROM swift:6.2-noble
+# Build stage
+FROM swift:6.2-noble AS builder
 
 WORKDIR /app
-
-# Install curl for health checks
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Copy Package files first for better caching
 COPY Package.swift Package.resolved ./
@@ -20,7 +18,27 @@ COPY Resources ./Resources
 # Build release with memory-conscious settings and cache mount
 RUN --mount=type=cache,target=/root/.swiftpm \
     --mount=type=cache,target=/root/.cache \
-    swift build -c release --jobs 1
+    swift build -c release --jobs 1 --static-swift-stdlib
+
+# Runtime stage - much smaller base image
+FROM ubuntu:24.04
+
+# Install only runtime dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    curl \
+    ca-certificates \
+    libicu74 \
+    libxml2 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy the built binary from builder
+COPY --from=builder /app/.build/release/App /app/App
+
+# Copy Resources directory
+COPY --from=builder /app/Resources /app/Resources
 
 # Create non-root user for security (use UID 1001 to avoid conflicts)
 RUN useradd -m -u 1001 appuser && \
@@ -40,4 +58,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-CMD [".build/release/App", "serve", "--env", "production", "--hostname", "0.0.0.0", "--port", "8080"]
+CMD ["/app/App", "serve", "--env", "production", "--hostname", "0.0.0.0", "--port", "8080"]
