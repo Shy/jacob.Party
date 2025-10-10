@@ -170,7 +170,7 @@ func routes(_ app: Application) throws {
                         id: "update-location-\(UUID().uuidString)",
                         taskQueue: "party-queue"
                     ),
-                    input: UpdateLocationInput(location: body.location)
+                    input: PartyActivities.UpdateLocationInput(location: body.location)
                 )
                 req.logger.info("✅ Started UpdateLocationWorkflow")
             } catch {
