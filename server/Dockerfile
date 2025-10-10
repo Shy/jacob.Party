@@ -14,6 +14,9 @@ RUN --mount=type=cache,target=/root/.swiftpm swift package resolve
 # Copy source code
 COPY Sources ./Sources
 
+# Copy Resources directory for static files (HTML, etc.)
+COPY Resources ./Resources
+
 # Build release with memory-conscious settings and cache mount
 RUN --mount=type=cache,target=/root/.swiftpm \
     --mount=type=cache,target=/root/.cache \
