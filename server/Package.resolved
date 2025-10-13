@@ -313,7 +313,7 @@
       "location" : "https://github.com/Shy/swift-temporal-sdk.git",
       "state" : {
         "branch" : "apiKeyFix",
-        "revision" : "8f073259837262a7cb6cdeb6895b77296b269e90"
+        "revision" : "6743864b4ad4eaee96038390a345f40d729303f2"
       }
     },
     {
