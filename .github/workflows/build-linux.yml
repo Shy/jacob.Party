@@ -11,10 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Swift
-        uses: swift-actions/setup-swift@v2
-        with:
-          swift-version: '6.2'
+      - name: Install Swift 6.2
+        run: |
+          curl -fsSL https://download.swift.org/swift-6.2-release/ubuntu2404/swift-6.2-RELEASE/swift-6.2-RELEASE-ubuntu24.04.tar.gz | tar xz -C /tmp
+          echo "/tmp/swift-6.2-RELEASE-ubuntu24.04/usr/bin" >> $GITHUB_PATH
 
       - name: Build Release Binary
         run: |

@@ -10,7 +10,7 @@ The app consists of three components that all communicate through Temporal:
 - **iOS App** - SwiftUI app with background location tracking and device authentication
 - **Web Interface** - Real-time party status display with Google Maps integration
 
-**The Goal**: Demonstrate practical patterns for using Temporal with Swift, including workflow definitions, activity implementations, mTLS authentication with Temporal Cloud, and integrating Temporal workers into existing Swift server applications.
+**The Goal**: Demonstrate practical patterns for using Temporal with Swift, including workflow definitions, activity implementations, flexible authentication (API key or mTLS) with Temporal Cloud, and integrating Temporal workers into existing Swift server applications.
 
 ## Monorepo Structure
 
@@ -39,10 +39,11 @@ The app consists of three components that all communicate through Temporal:
 - Temporal worker integrated with Vapor server
 
 **Swift Temporal SDK Usage**
-- Client and worker initialization with mTLS support
+- Client and worker initialization with flexible authentication (API key or mTLS)
 - Workflow and activity definitions using Swift macros
 - Environment-based configuration (local vs cloud)
 - HTTP API triggering workflows
+- Multi-stage Docker builds for production (~2GB images)
 
 **iOS Integration**
 - Battery-efficient location tracking (10m accuracy, 50m distance filter)
@@ -72,6 +73,8 @@ The app consists of three components that all communicate through Temporal:
 - Swift 6.2+
 - Xcode 16+ (for iOS app)
 - Temporal Server (local) or Temporal Cloud account
+
+**Note:** Uses fork of Swift Temporal SDK with API key auth support: `github.com/Shy/swift-temporal-sdk` (branch: `apiKeyFix`)
 
 ## Quick Start
 
@@ -203,37 +206,46 @@ Anyone can view the website and see where the party is, but only authorized devi
 
 ## Container Deployment
 
-Build and run with Docker:
-
 ```bash
 cd server
-
-# Build the container
 docker build -t jacob-party .
 
-# Run with environment file
+# With API key auth (no certificate mount needed)
+docker run -p 8080:8080 --env-file ../.env jacob-party
+
+# With mTLS auth (mount certificates)
 docker run -p 8080:8080 --env-file ../.env -v $(pwd)/../certs:/app/certs:ro jacob-party
-```
 
-Or use Docker Compose:
-
-```bash
-cd server
+# Or use Docker Compose
 docker-compose up -d
 ```
 
-## Using Temporal Cloud
+Multi-stage Dockerfile builds ~2GB images (includes Swift runtime libraries).
 
-See [certs/README.md](certs/README.md) for certificate setup.
+## Temporal Cloud Authentication
 
-Update `.env`:
+**API Key (Recommended)** - Simplest option, no certificates:
 ```env
+TEMPORAL_TLS_ENABLED=true
+TEMPORAL_HOST=us-east-1.aws.api.temporal.io
+TEMPORAL_NAMESPACE=your-namespace
+TEMPORAL_API_KEY=your-api-key
+```
+
+**mTLS Certificates** - Traditional authentication:
+```env
+TEMPORAL_TLS_ENABLED=true
 TEMPORAL_HOST=your-namespace.tmprl.cloud
 TEMPORAL_NAMESPACE=your-namespace
-TEMPORAL_TLS_ENABLED=true
 TEMPORAL_CLIENT_CERT=certs/client.pem
 TEMPORAL_CLIENT_KEY=certs/client.key
 ```
+See [certs/README.md](certs/README.md) for certificate setup.
+
+**Both** - Maximum security (combine above configurations):
+- Uses mTLS for transport + API key for application-level auth
+
+The code automatically detects which method(s) to use from environment variables.
 
 ## How It Works
 
