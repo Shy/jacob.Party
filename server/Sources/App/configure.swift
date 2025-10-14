@@ -208,8 +208,7 @@ public func configure(_ app: Application) async throws {
             transportSecurity: .plaintext,
             configuration: .init(
                 instrumentation: .init(serverHostname: temporalHost),
-                namespace: temporalNamespace,
-                apiKey: temporalApiKey
+                namespace: temporalNamespace
             ),
             logger: logger
         )
@@ -219,8 +218,7 @@ public func configure(_ app: Application) async throws {
         let workerConfig = TemporalWorker.Configuration(
             namespace: temporalNamespace,
             taskQueue: temporalTaskQueue,
-            instrumentation: .init(serverHostname: temporalHost),
-            apiKey: temporalApiKey
+            instrumentation: .init(serverHostname: temporalHost)
         )
 
         let worker = try TemporalWorker(
