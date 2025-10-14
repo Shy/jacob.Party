@@ -144,8 +144,7 @@ public func configure(_ app: Application) async throws {
                 ),
                 configuration: .init(
                     instrumentation: .init(serverHostname: temporalHost),
-                    namespace: temporalNamespace,
-                    apiKey: temporalApiKey
+                    namespace: temporalNamespace
                 ),
                 logger: logger
             )
@@ -154,8 +153,7 @@ public func configure(_ app: Application) async throws {
             let workerConfig = TemporalWorker.Configuration(
                 namespace: temporalNamespace,
                 taskQueue: temporalTaskQueue,
-                instrumentation: .init(serverHostname: temporalHost),
-                apiKey: temporalApiKey
+                instrumentation: .init(serverHostname: temporalHost)
             )
             let worker = try TemporalWorker(
                 configuration: workerConfig,
@@ -176,8 +174,7 @@ public func configure(_ app: Application) async throws {
                 transportSecurity: .tls,
                 configuration: .init(
                     instrumentation: .init(serverHostname: temporalHost),
-                    namespace: temporalNamespace,
-                    apiKey: temporalApiKey
+                    namespace: temporalNamespace
                 ),
                 logger: logger
             )
@@ -186,8 +183,7 @@ public func configure(_ app: Application) async throws {
             let workerConfig = TemporalWorker.Configuration(
                 namespace: temporalNamespace,
                 taskQueue: temporalTaskQueue,
-                instrumentation: .init(serverHostname: temporalHost),
-                apiKey: temporalApiKey
+                instrumentation: .init(serverHostname: temporalHost)
             )
             let worker = try TemporalWorker(
                 configuration: workerConfig,
