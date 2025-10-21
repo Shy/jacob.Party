@@ -204,7 +204,7 @@ public func configure(_ app: Application) async throws {
         ])
 
         let client = try TemporalClient(
-            target: .ipv4(address: temporalHost, port: temporalPort),
+            target: .dns(host: temporalHost, port: temporalPort),
             transportSecurity: .plaintext,
             configuration: .init(
                 instrumentation: .init(serverHostname: temporalHost),
@@ -223,7 +223,7 @@ public func configure(_ app: Application) async throws {
 
         let worker = try TemporalWorker(
             configuration: workerConfig,
-            target: .ipv4(address: temporalHost, port: temporalPort),
+            target: .dns(host: temporalHost, port: temporalPort),
             transportSecurity: .plaintext,
             activityContainers: PartyActivities(),
             workflows: [PartyWorkflow.self, GetPartyStateWorkflow.self, StopPartyWorkflow.self, UpdateLocationWorkflow.self],

@@ -1,5 +1,5 @@
 {
-  "originHash" : "4b08069a812d401fcdf6494649bcbb9b01a0c4c1165cb2eb49d44fd13455361c",
+  "originHash" : "80723a9a9e86ed57fd1e1b11c78b22648f53857f1c0831bef83a425b6ecdd909",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -312,8 +312,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-temporal-sdk.git",
       "state" : {
-        "revision" : "f90f8f212f0353e03faf9d52c6e219421d273665",
-        "version" : "0.1.0"
+        "revision" : "274d19b4ad03703e4651d9165c20bc498dc1a579",
+        "version" : "0.3.0"
       }
     },
     {
