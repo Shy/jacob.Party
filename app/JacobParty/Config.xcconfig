@@ -2,5 +2,6 @@
 // https://help.apple.com/xcode/#/dev745c5c974
 
 // Server URL for API requests
-// Update this to point to your server (local or production)
-SERVER_URL = https:/$()/shy-jason-party-g2ffr.ondigitalocean.app
+// For local development, use localhost. For production, use your deployed URL.
+SERVER_URL = http:/$()/127.0.0.1:8080
+// Production: SERVER_URL = https:/$()/shy-jason-party-g2ffr.ondigitalocean.app

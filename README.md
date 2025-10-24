@@ -1,16 +1,13 @@
 # jacob.party
 
-A demonstration project for the [Swift SDK for Temporal](https://github.com/apple/swift-temporal-sdk) showing how to build a real-world application with Temporal workflows, activities, and workers in Swift.
+A demonstration project using [Apple's Swift SDK for Temporal](https://github.com/apple/swift-temporal-sdk) showing how to build a real-world application with Temporal workflows, activities, and workers in Swift.
 
-**The App**: Let your friends know when you're out partying so they can come join you. Start the party on your iPhone, and your friends can see your location on the web in real-time. Built for my friend [Jake](https://www.linkedin.com/in/jacob-price-05a6562b/) who wanted an easy way to broadcast party status.
+**The App**: Let your friends know when you're out partying so they can come join you. Start the party on your iPhone, and your friends can see your location on the web in real-time.
 
-The app consists of three components that all communicate through Temporal:
-
+Three components communicate through Temporal:
 - **Vapor Server** - HTTP API that triggers Temporal workflows
-- **iOS App** - SwiftUI app with background location tracking and device authentication
+- **iOS App** - SwiftUI app with background location tracking
 - **Web Interface** - Real-time party status display with Google Maps integration
-
-**The Goal**: Demonstrate practical patterns for using Temporal with Swift, including workflow definitions, activity implementations, flexible authentication (API key or mTLS) with Temporal Cloud, and integrating Temporal workers into existing Swift server applications.
 
 ## Monorepo Structure
 
@@ -33,198 +30,102 @@ The app consists of three components that all communicate through Temporal:
 ## What This Demonstrates
 
 **Temporal with Swift**
-- Four workflow types: start party, stop party, update location, query state
-- Activities for storage operations
-- Non-blocking workflow execution
-- Temporal worker integrated with Vapor server
-
-**Swift Temporal SDK Usage**
-- Client and worker initialization with flexible authentication (API key or mTLS)
+- Four workflow types (start/stop party, update location, query state)
 - Workflow and activity definitions using Swift macros
-- Environment-based configuration (local vs cloud)
-- HTTP API triggering workflows
-- Multi-stage Docker builds for production (~2GB images)
+- Client and worker initialization with flexible authentication (API key or mTLS)
+- Worker integrated with Vapor server in same process
 
 **iOS Integration**
 - Battery-efficient location tracking (10m accuracy, 50m distance filter)
-- Automatic updates only when moved >50m AND 60+ seconds elapsed
+- Updates only when moved >50m AND 60+ seconds elapsed
 - Device-based authentication with Keychain UUID storage
 - Background location updates while party is active
-- Secure communication with server via authenticated API requests
 
-**Performance & Battery Optimization**
-- iOS: 10-meter accuracy instead of Best (saves ~40-50% battery)
-- iOS: Auto-pause location updates when stationary
-- Web: Exponential backoff polling (10s → 30s → 60s → 120s)
-- Web: Stops polling entirely when tab is hidden
-- Server: Rate limiting (30 requests/minute per IP)
-
-**Security**
-- Device authentication middleware
-- UUID-based device whitelist
-- Secure keychain storage for persistent device identity
-- Rate limiting protection against abuse
-
-**Storage**
-- JSON file-based persistence (no database required)
+**Performance & Security**
+- Web polling with exponential backoff (10s → 120s), pauses when tab hidden
+- Rate limiting (30 requests/minute per IP)
+- Device authentication middleware with optional UUID whitelist
+- JSON file storage (no database required)
 
 ## Prerequisites
 
-- Swift 6.2+
+- Swift 6.2+ with [Apple's Swift SDK for Temporal](https://github.com/apple/swift-temporal-sdk)
 - Xcode 16+ (for iOS app)
-- Temporal Server (local) or Temporal Cloud account
-
-**Note:** Uses fork of Swift Temporal SDK with API key auth support: `github.com/Shy/swift-temporal-sdk` (branch: `apiKeyFix`)
+- Temporal Server (local dev) or Temporal Cloud account
 
 ## Quick Start
 
-### 1. Start Temporal Server
-
-```bash
-# Install Temporal CLI
-brew install temporal
-
-# Start local server
-temporal server start-dev
-```
-
-Leave this running in a terminal.
-
-### 2. Get Google Maps API Key
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project
-3. Enable **Maps JavaScript API**
-4. Create credentials → API Key
-5. Copy the API key
-
-### 3. Configure Environment
+### 1. Configure Environment
 
 ```bash
 cp .env.example .env
+# Edit .env to add your Google Maps API key
+cp .env server/.env
 ```
 
-Edit `.env` and add your Google Maps API key:
-```env
-GOOGLE_MAPS_API_KEY=your_actual_api_key_here
+### 2. Start Temporal Server
+
+```bash
+temporal server start-dev
 ```
 
-All available environment variables:
-```env
-# Application Name
-APP_NAME=jacob
-
-# Google Maps API Key (REQUIRED for map display)
-GOOGLE_MAPS_API_KEY=YOUR_API_KEY_HERE
-
-# Temporal Configuration (defaults for local development)
-TEMPORAL_HOST=127.0.0.1
-TEMPORAL_PORT=7233
-TEMPORAL_NAMESPACE=default
-TEMPORAL_TASK_QUEUE=party-queue
-
-# Server Configuration
-SERVER_HOST=0.0.0.0
-SERVER_PORT=8080
-
-# Device Authentication (leave empty to allow all devices)
-ALLOWED_DEVICE_IDS=
-```
-
-### 4. Run Server
+### 3. Run Server
 
 ```bash
 cd server
 swift build
-.build/debug/App
+.build/debug/App serve
 ```
 
-Server starts on `http://127.0.0.1:8080` and connects to local Temporal.
+Server starts on `http://127.0.0.1:8080` and loads config from `.env`.
 
-### 5. Run iOS App (Optional)
+### 4. Run iOS App (Optional)
 
 ```bash
 open app/JacobParty/JacobParty.xcodeproj
 ```
 
-Build and run in Xcode. Or use the web interface at `http://127.0.0.1:8080`.
-
-**For production deployment:** Update the base URL in `PartyViewModel.swift`:
-```swift
-private let baseURL = "https://yourserver.com"  // Change from localhost
-```
+Build and run in Xcode (⌘R). App loads `SERVER_URL` from `app/JacobParty/Config.xcconfig`.
 
 ## Device Authentication
 
-The iOS app uses device-based authentication with persistent UUIDs stored in the Keychain.
-
-### How It Works
-
-1. **iOS App**: Generates a unique UUID on first launch and stores it securely in the Keychain
-2. **All API Requests**: Include `X-Device-ID` header with the device UUID
-3. **Server**: Validates device IDs against an optional whitelist
+The iOS app generates a unique UUID on first launch (stored in Keychain) and sends it in the `X-Device-ID` header with all requests.
 
 ### Getting Your Device UUID
 
-Run the iOS app once and check the server logs:
+Run the iOS app and check server logs:
 ```bash
 tail -f /tmp/server.log | grep "Device ID"
+# Output: 📱 Device ID: 779D6E13-14A4-4130-A82B-7D858AE4C34B (whitelist disabled)
 ```
 
-You'll see: `📱 Device ID: 779D6E13-14A4-4130-A82B-7D858AE4C34B (whitelist disabled)`
+### Optional Whitelist
 
-### Enabling the Whitelist
-
-Add allowed device UUIDs to `.env`:
+Add allowed device UUIDs to `.env` (empty = all devices allowed):
 ```env
-# Single device
-ALLOWED_DEVICE_IDS=779D6E13-14A4-4130-A82B-7D858AE4C34B
-
-# Multiple devices (comma-separated)
 ALLOWED_DEVICE_IDS=779D6E13-14A4-4130-A82B-7D858AE4C34B,ANOTHER-UUID-HERE
 ```
 
-**Empty = All devices allowed (development mode)**
-
-With whitelist enabled:
-- ✅ Requests with allowed device IDs: Accepted
-- ❌ Requests with unknown device IDs: `403 Forbidden`
-- ❌ Requests without device ID header: `401 Unauthorized`
-
-### Public vs Protected Endpoints
-
-**Public (no authentication):**
-- `GET /` - Website
-- `GET /api/state` - View party state (read-only)
-
-**Protected (requires device authentication):**
-- `POST /api/party/start` - Start party
-- `POST /api/party/stop` - Stop party
-- `POST /api/party/location` - Update location
-
-Anyone can view the website and see where the party is, but only authorized devices can control it.
+**Endpoints:**
+- Public: `GET /` (website), `GET /api/state` (party status)
+- Protected: `POST /api/party/*` (requires device authentication)
 
 ## Container Deployment
 
 ```bash
 cd server
 docker build -t jacob-party .
-
-# With API key auth (no certificate mount needed)
 docker run -p 8080:8080 --env-file ../.env jacob-party
-
-# With mTLS auth (mount certificates)
-docker run -p 8080:8080 --env-file ../.env -v $(pwd)/../certs:/app/certs:ro jacob-party
 
 # Or use Docker Compose
 docker-compose up -d
 ```
 
-Multi-stage Dockerfile builds ~2GB images (includes Swift runtime libraries).
+For mTLS, mount certificates: `-v $(pwd)/../certs:/app/certs:ro`
 
 ## Temporal Cloud Authentication
 
-**API Key (Recommended)** - Simplest option, no certificates:
+**API Key (Recommended)**:
 ```env
 TEMPORAL_TLS_ENABLED=true
 TEMPORAL_HOST=us-east-1.aws.api.temporal.io
@@ -232,7 +133,7 @@ TEMPORAL_NAMESPACE=your-namespace
 TEMPORAL_API_KEY=your-api-key
 ```
 
-**mTLS Certificates** - Traditional authentication:
+**mTLS Certificates**:
 ```env
 TEMPORAL_TLS_ENABLED=true
 TEMPORAL_HOST=your-namespace.tmprl.cloud
@@ -240,88 +141,38 @@ TEMPORAL_NAMESPACE=your-namespace
 TEMPORAL_CLIENT_CERT=certs/client.pem
 TEMPORAL_CLIENT_KEY=certs/client.key
 ```
-See [certs/README.md](certs/README.md) for certificate setup.
-
-**Both** - Maximum security (combine above configurations):
-- Uses mTLS for transport + API key for application-level auth
-
-The code automatically detects which method(s) to use from environment variables.
+See [certs/README.md](certs/README.md) for setup. Can combine both methods for maximum security.
 
 ## How It Works
 
-### Temporal Workflows
+Four Temporal workflows handle all party operations:
 
-**PartyWorkflow** - Start party with location
-```
-POST /api/party/start → PartyWorkflow → recordPartyStart activity → Write JSON
-```
-
-**UpdateLocationWorkflow** - Update location while partying
-```
-POST /api/party/location → UpdateLocationWorkflow → updateLocation activity → Update JSON
-```
-*iOS app automatically sends location updates when you move >50m AND 60+ seconds have passed*
-
-**GetPartyStateWorkflow** - Query current state
-```
-GET /api/state → GetPartyStateWorkflow → getPartyState activity → Read JSON
-```
-
-**StopPartyWorkflow** - Stop party and clear data
-```
-POST /api/party/stop → StopPartyWorkflow → recordPartyEnd activity → Delete JSON
-```
+1. **PartyWorkflow** - Start party: `POST /api/party/start` → `recordPartyStart` activity → Write JSON
+2. **UpdateLocationWorkflow** - Update location: `POST /api/party/location` → `updateLocation` activity → Update JSON
+3. **GetPartyStateWorkflow** - Query state: `GET /api/state` → `getPartyState` activity → Read JSON
+4. **StopPartyWorkflow** - Stop party: `POST /api/party/stop` → `recordPartyEnd` activity → Delete JSON
 
 All workflows complete immediately. Activities handle JSON file storage.
 
 ## Key Files
 
-**Swift Temporal SDK Integration:**
-- [server/Sources/App/configure.swift](server/Sources/App/configure.swift) - Client and worker setup
+- [server/Sources/App/configure.swift](server/Sources/App/configure.swift) - Temporal client and worker setup
 - [server/Sources/App/Workflows/](server/Sources/App/Workflows/) - Workflow definitions
-- [server/Sources/App/Activities/PartyActivities.swift](server/Sources/App/Activities/PartyActivities.swift) - Activity definitions
-
-**HTTP API:**
-- [server/Sources/App/routes.swift](server/Sources/App/routes.swift) - Vapor routes triggering workflows
+- [server/Sources/App/Activities/PartyActivities.swift](server/Sources/App/Activities/PartyActivities.swift) - Activity implementations
+- [server/Sources/App/routes.swift](server/Sources/App/routes.swift) - HTTP API routes
 - [server/Sources/App/Middleware/](server/Sources/App/Middleware/) - Auth and rate limiting
 
 ## Debugging
 
 **Temporal UI:** `http://localhost:8233`
 
-**CLI Commands:**
+**CLI:**
 ```bash
-# List workflows
 temporal workflow list
-
-# View specific workflow
 temporal workflow describe --workflow-id jacob-party
-
-# View workflow history
-temporal workflow show --workflow-id jacob-party
 ```
 
-**Troubleshooting:**
-
-*Map not showing?*
-- Check `GOOGLE_MAPS_API_KEY` is set in `.env`
-- Verify Maps JavaScript API is enabled in Google Cloud Console
-- Check browser console for errors
-
-*Server won't start?*
-- Ensure Temporal server is running: `temporal server start-dev`
-- Check port 8080 is not in use: `lsof -i :8080`
-- Verify `.env` file exists with correct syntax
-
-*iOS location not updating?*
-- Check location permissions in Settings → Privacy
-- Verify "Always Allow" location permission is granted
-- Check that party mode is active (location only updates while partying)
-
-## Architecture Notes
-
-- JSON file storage (no database required)
-- Non-blocking workflows (complete immediately)
-- Activities handle all I/O operations
-- Worker and HTTP server in same process
-- Supports both local Temporal and Temporal Cloud
+**Common Issues:**
+- Map not showing? Check `GOOGLE_MAPS_API_KEY` in `.env` and Maps JavaScript API enabled
+- Server won't start? Verify Temporal is running (`temporal server start-dev`) and port 8080 is free
+- iOS location not updating? Check "Always Allow" location permission and party mode is active
