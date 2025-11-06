@@ -1,7 +1,7 @@
-import Vapor
-import Temporal
-import Logging
 import Foundation
+import Logging
+import Temporal
+import Vapor
 
 // Storage for cleanup and graceful shutdown
 struct CertCleanupKey: StorageKey {
@@ -80,7 +80,8 @@ public func configure(_ app: Application) async throws {
 
     // If certificate contents are provided as env vars (Digital Ocean), write them to temp files
     if let certContent = Environment.get("TEMPORAL_CLIENT_CERT_CONTENT"),
-       let keyContent = Environment.get("TEMPORAL_CLIENT_KEY_CONTENT") {
+        let keyContent = Environment.get("TEMPORAL_CLIENT_KEY_CONTENT")
+    {
         let tmpDir = FileManager.default.temporaryDirectory
         let certFile = tmpDir.appendingPathComponent("client.pem")
         let keyFile = tmpDir.appendingPathComponent("client.key")
@@ -104,7 +105,8 @@ public func configure(_ app: Application) async throws {
 
     // Load allowed device IDs from environment
     let allowedDeviceIDsStr = Environment.get("ALLOWED_DEVICE_IDS") ?? ""
-    let allowedDeviceIDs = allowedDeviceIDsStr
+    let allowedDeviceIDs =
+        allowedDeviceIDsStr
         .split(separator: ",")
         .map { $0.trimmingCharacters(in: .whitespaces) }
         .filter { !$0.isEmpty }
@@ -113,21 +115,25 @@ public func configure(_ app: Application) async throws {
     if allowedDeviceIDs.isEmpty {
         logger.warning("⚠️  No device whitelist configured - all devices will be allowed")
     } else {
-        logger.info("🔒 Device whitelist enabled", metadata: [
-            "device_count": "\(allowedDeviceIDs.count)"
-        ])
+        logger.info(
+            "🔒 Device whitelist enabled",
+            metadata: [
+                "device_count": "\(allowedDeviceIDs.count)"
+            ])
     }
 
     // Determine if using TLS and create client/worker accordingly
     if tlsEnabled {
         let authMethod = temporalApiKey != nil ? "API Key" : "mTLS"
-        logger.info("🔐 Connecting to Temporal Cloud", metadata: [
-            "host": "\(temporalHost)",
-            "port": "\(temporalPort)",
-            "namespace": "\(temporalNamespace)",
-            "task_queue": "\(temporalTaskQueue)",
-            "auth_method": "\(authMethod)"
-        ])
+        logger.info(
+            "🔐 Connecting to Temporal Cloud",
+            metadata: [
+                "host": "\(temporalHost)",
+                "port": "\(temporalPort)",
+                "namespace": "\(temporalNamespace)",
+                "task_queue": "\(temporalTaskQueue)",
+                "auth_method": "\(authMethod)",
+            ])
 
         // Create Client and Worker with appropriate transport security
         // Supports both authentication methods:
@@ -153,7 +159,8 @@ public func configure(_ app: Application) async throws {
             let workerConfig = TemporalWorker.Configuration(
                 namespace: temporalNamespace,
                 taskQueue: temporalTaskQueue,
-                instrumentation: .init(serverHostname: temporalHost)
+                instrumentation: .init(serverHostname: temporalHost),
+                interceptors: []
             )
             let worker = try TemporalWorker(
                 configuration: workerConfig,
@@ -163,7 +170,10 @@ public func configure(_ app: Application) async throws {
                     privateKey: .file(path: keyPath, format: .pem)
                 ),
                 activityContainers: PartyActivities(),
-                workflows: [PartyWorkflow.self, GetPartyStateWorkflow.self, StopPartyWorkflow.self, UpdateLocationWorkflow.self],
+                workflows: [
+                    PartyWorkflow.self, GetPartyStateWorkflow.self, StopPartyWorkflow.self,
+                    UpdateLocationWorkflow.self,
+                ],
                 logger: logger
             )
             app.storage[WorkerKey.self] = worker
@@ -183,25 +193,31 @@ public func configure(_ app: Application) async throws {
             let workerConfig = TemporalWorker.Configuration(
                 namespace: temporalNamespace,
                 taskQueue: temporalTaskQueue,
-                instrumentation: .init(serverHostname: temporalHost)
+                instrumentation: .init(serverHostname: temporalHost),
+                interceptors: []
             )
             let worker = try TemporalWorker(
                 configuration: workerConfig,
                 target: .dns(host: temporalHost, port: temporalPort),
                 transportSecurity: .tls,
                 activityContainers: PartyActivities(),
-                workflows: [PartyWorkflow.self, GetPartyStateWorkflow.self, StopPartyWorkflow.self, UpdateLocationWorkflow.self],
+                workflows: [
+                    PartyWorkflow.self, GetPartyStateWorkflow.self, StopPartyWorkflow.self,
+                    UpdateLocationWorkflow.self,
+                ],
                 logger: logger
             )
             app.storage[WorkerKey.self] = worker
         }
     } else {
         // Local development with plaintext
-        logger.warning("⚠️  Using plaintext connection (local development)", metadata: [
-            "host": "\(temporalHost)",
-            "port": "\(temporalPort)",
-            "namespace": "\(temporalNamespace)"
-        ])
+        logger.warning(
+            "⚠️  Using plaintext connection (local development)",
+            metadata: [
+                "host": "\(temporalHost)",
+                "port": "\(temporalPort)",
+                "namespace": "\(temporalNamespace)",
+            ])
 
         let client = try TemporalClient(
             target: .dns(host: temporalHost, port: temporalPort),
@@ -218,7 +234,8 @@ public func configure(_ app: Application) async throws {
         let workerConfig = TemporalWorker.Configuration(
             namespace: temporalNamespace,
             taskQueue: temporalTaskQueue,
-            instrumentation: .init(serverHostname: temporalHost)
+            instrumentation: .init(serverHostname: temporalHost),
+            interceptors: []
         )
 
         let worker = try TemporalWorker(
@@ -226,7 +243,10 @@ public func configure(_ app: Application) async throws {
             target: .dns(host: temporalHost, port: temporalPort),
             transportSecurity: .plaintext,
             activityContainers: PartyActivities(),
-            workflows: [PartyWorkflow.self, GetPartyStateWorkflow.self, StopPartyWorkflow.self, UpdateLocationWorkflow.self],
+            workflows: [
+                PartyWorkflow.self, GetPartyStateWorkflow.self, StopPartyWorkflow.self,
+                UpdateLocationWorkflow.self,
+            ],
             logger: logger
         )
 
@@ -235,7 +255,8 @@ public func configure(_ app: Application) async throws {
 
     // Start client and worker in background with proper error handling
     guard let client = app.storage[ClientKey.self],
-          let worker = app.storage[WorkerKey.self] else {
+        let worker = app.storage[WorkerKey.self]
+    else {
         throw Abort(.internalServerError, reason: "Client or worker not initialized")
     }
 
@@ -246,20 +267,24 @@ public func configure(_ app: Application) async throws {
 
         while retryCount < maxRetries && !Task.isCancelled {
             do {
-                logger.info("🔌 Starting Temporal client...", metadata: [
-                    "attempt": "\(retryCount + 1)"
-                ])
+                logger.info(
+                    "🔌 Starting Temporal client...",
+                    metadata: [
+                        "attempt": "\(retryCount + 1)"
+                    ])
                 try await client.run()
                 logger.info("✅ Temporal client connected successfully")
                 break
             } catch {
                 retryCount += 1
-                logger.error("❌ Temporal client failed", metadata: [
-                    "error": "\(error)",
-                    "error_type": "\(type(of: error))",
-                    "attempt": "\(retryCount)",
-                    "max_retries": "\(maxRetries)"
-                ])
+                logger.error(
+                    "❌ Temporal client failed",
+                    metadata: [
+                        "error": "\(error)",
+                        "error_type": "\(type(of: error))",
+                        "attempt": "\(retryCount)",
+                        "max_retries": "\(maxRetries)",
+                    ])
 
                 if retryCount < maxRetries && !Task.isCancelled {
                     let backoff = Duration.seconds(min(retryCount * 2, 10))
@@ -281,20 +306,24 @@ public func configure(_ app: Application) async throws {
 
         while retryCount < maxRetries && !Task.isCancelled {
             do {
-                logger.info("👷 Starting Temporal worker...", metadata: [
-                    "attempt": "\(retryCount + 1)"
-                ])
+                logger.info(
+                    "👷 Starting Temporal worker...",
+                    metadata: [
+                        "attempt": "\(retryCount + 1)"
+                    ])
                 try await worker.run()
                 logger.info("✅ Temporal worker running successfully")
                 break
             } catch {
                 retryCount += 1
-                logger.error("❌ Temporal worker failed", metadata: [
-                    "error": "\(error)",
-                    "error_type": "\(type(of: error))",
-                    "attempt": "\(retryCount)",
-                    "max_retries": "\(maxRetries)"
-                ])
+                logger.error(
+                    "❌ Temporal worker failed",
+                    metadata: [
+                        "error": "\(error)",
+                        "error_type": "\(type(of: error))",
+                        "attempt": "\(retryCount)",
+                        "max_retries": "\(maxRetries)",
+                    ])
 
                 if retryCount < maxRetries && !Task.isCancelled {
                     let backoff = Duration.seconds(min(retryCount * 2, 10))
@@ -318,13 +347,15 @@ public func configure(_ app: Application) async throws {
         GracefulShutdownHandler(taskManager: taskManager, certCleanup: certCleanup, logger: logger)
     )
 
-    logger.info("🚀 Server ready", metadata: [
-        "app_name": "\(appName)",
-        "host": "\(serverHost)",
-        "port": "\(serverPort)",
-        "temporal_connected": "true",
-        "worker_running": "true"
-    ])
+    logger.info(
+        "🚀 Server ready",
+        metadata: [
+            "app_name": "\(appName)",
+            "host": "\(serverHost)",
+            "port": "\(serverPort)",
+            "temporal_connected": "true",
+            "worker_running": "true",
+        ])
 }
 
 struct ClientKey: StorageKey {
@@ -382,7 +413,9 @@ func validateEnvironment(logger: Logger) throws {
     let tlsEnabled = Environment.get("TEMPORAL_TLS_ENABLED")?.lowercased() == "true"
 
     if tlsEnabled {
-        let hasApiKey = Environment.get("TEMPORAL_API_KEY") != nil && !Environment.get("TEMPORAL_API_KEY")!.isEmpty
+        let hasApiKey =
+            Environment.get("TEMPORAL_API_KEY") != nil
+            && !Environment.get("TEMPORAL_API_KEY")!.isEmpty
         let hasCertPath = Environment.get("TEMPORAL_CLIENT_CERT") != nil
         let hasKeyPath = Environment.get("TEMPORAL_CLIENT_KEY") != nil
         let hasCertContent = Environment.get("TEMPORAL_CLIENT_CERT_CONTENT") != nil
@@ -393,11 +426,12 @@ func validateEnvironment(logger: Logger) throws {
 
         if !hasApiKey && !hasCerts {
             logger.error("❌ TLS enabled but authentication configuration incomplete")
-            throw Abort(.internalServerError,
-                       reason: "TLS enabled but missing authentication. Provide one of:\n" +
-                              "  1. TEMPORAL_API_KEY (recommended), or\n" +
-                              "  2. TEMPORAL_CLIENT_CERT + TEMPORAL_CLIENT_KEY, or\n" +
-                              "  3. TEMPORAL_CLIENT_CERT_CONTENT + TEMPORAL_CLIENT_KEY_CONTENT")
+            throw Abort(
+                .internalServerError,
+                reason: "TLS enabled but missing authentication. Provide one of:\n"
+                    + "  1. TEMPORAL_API_KEY (recommended), or\n"
+                    + "  2. TEMPORAL_CLIENT_CERT + TEMPORAL_CLIENT_KEY, or\n"
+                    + "  3. TEMPORAL_CLIENT_CERT_CONTENT + TEMPORAL_CLIENT_KEY_CONTENT")
         }
 
         if hasApiKey {
@@ -409,7 +443,9 @@ func validateEnvironment(logger: Logger) throws {
 
     // Validate Temporal host is set for cloud deployments
     if tlsEnabled, let host = Environment.get("TEMPORAL_HOST"), host.contains("temporal.io") {
-        if let namespace = Environment.get("TEMPORAL_NAMESPACE"), !namespace.isEmpty, namespace != "default" {
+        if let namespace = Environment.get("TEMPORAL_NAMESPACE"), !namespace.isEmpty,
+            namespace != "default"
+        {
             // Valid namespace for cloud
         } else {
             logger.warning("⚠️  Using default namespace with Temporal Cloud - this may not work")
@@ -426,11 +462,12 @@ func loadEnvFile() {
     // Check current directory first, then parent directory
     let envPaths = [
         currentPath + "/.env",
-        currentPath + "/../.env"
+        currentPath + "/../.env",
     ]
 
     guard let envPath = envPaths.first(where: { fileManager.fileExists(atPath: $0) }),
-          let contents = try? String(contentsOfFile: envPath, encoding: .utf8) else {
+        let contents = try? String(contentsOfFile: envPath, encoding: .utf8)
+    else {
         return
     }
 
