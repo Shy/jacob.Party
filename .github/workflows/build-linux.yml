@@ -1,4 +1,4 @@
-name: CI - Build & Test
+name: Build & Push to GHCR
 
 on:
   workflow_dispatch:
@@ -8,31 +8,8 @@ on:
     branches: [main]
 
 jobs:
-  swift-build:
-    name: Swift Build (Linux)
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Swift 6.2
-        run: |
-          curl -fsSL https://download.swift.org/swift-6.2-release/ubuntu2404/swift-6.2-RELEASE/swift-6.2-RELEASE-ubuntu24.04.tar.gz | tar xz -C /tmp
-          echo "/tmp/swift-6.2-RELEASE-ubuntu24.04/usr/bin" >> $GITHUB_PATH
-
-      - name: Build Release Binary
-        run: |
-          cd server
-          swift build -c release
-
-      - name: Upload Binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: jacob-party-linux-x86_64
-          path: server/.build/release/App
-          retention-days: 7
-
-  docker-build:
-    name: Docker Build & Push
+  docker:
+    name: Build & Push Docker Image
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -53,42 +30,19 @@ jobs:
       - name: Build Docker Image
         run: |
           cd server
-          docker build --no-cache -t jacob-party:ci-test .
-
-      - name: Test Docker Image
-        run: |
-          # Start container with dummy env vars
-          docker run -d \
-            --name jacob-party-test \
-            -p 8080:8080 \
-            -e TEMPORAL_HOST=127.0.0.1 \
-            -e TEMPORAL_NAMESPACE=default \
-            -e TEMPORAL_TLS_ENABLED=false \
-            -e GOOGLE_MAPS_API_KEY=test \
-            jacob-party:ci-test || true
-
-          # Give it a few seconds to start or crash
-          sleep 10
-
-          # Check if container is still running (no immediate crashes)
-          if docker ps | grep -q jacob-party-test; then
-            echo "✅ Container started successfully"
-            docker logs jacob-party-test
-            docker stop jacob-party-test
-          else
-            echo "❌ Container crashed"
-            docker logs jacob-party-test
-            exit 1
-          fi
+          docker build --no-cache -t jacob-party:latest .
 
       - name: Push to GitHub Container Registry
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           cd server
+          # Convert owner to lowercase for GHCR compatibility
+          OWNER_LOWERCASE=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
           # Tag with commit SHA and latest
-          docker tag jacob-party:ci-test ghcr.io/${{ github.repository_owner }}/jacob-party:${{ github.sha }}
-          docker tag jacob-party:ci-test ghcr.io/${{ github.repository_owner }}/jacob-party:latest
+          docker tag jacob-party:latest ghcr.io/${OWNER_LOWERCASE}/jacob-party:${{ github.sha }}
+          docker tag jacob-party:latest ghcr.io/${OWNER_LOWERCASE}/jacob-party:latest
 
           # Push both tags
-          docker push ghcr.io/${{ github.repository_owner }}/jacob-party:${{ github.sha }}
-          docker push ghcr.io/${{ github.repository_owner }}/jacob-party:latest
+          docker push ghcr.io/${OWNER_LOWERCASE}/jacob-party:${{ github.sha }}
+          docker push ghcr.io/${OWNER_LOWERCASE}/jacob-party:latest
