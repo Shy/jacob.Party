@@ -1,12 +1,15 @@
-name: Build Linux Binary
+name: CI - Build & Test
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  build:
+  swift-build:
+    name: Swift Build (Linux)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -27,3 +30,43 @@ jobs:
           name: jacob-party-linux-x86_64
           path: server/.build/release/App
           retention-days: 7
+
+  docker-build:
+    name: Docker Build Test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        run: |
+          cd server
+          docker build -t jacob-party:ci-test .
+
+      - name: Test Docker Image
+        run: |
+          # Start container with dummy env vars
+          docker run -d \
+            --name jacob-party-test \
+            -p 8080:8080 \
+            -e TEMPORAL_HOST=127.0.0.1 \
+            -e TEMPORAL_NAMESPACE=default \
+            -e TEMPORAL_TLS_ENABLED=false \
+            -e GOOGLE_MAPS_API_KEY=test \
+            jacob-party:ci-test || true
+
+          # Give it a few seconds to start or crash
+          sleep 10
+
+          # Check if container is still running (no immediate crashes)
+          if docker ps | grep -q jacob-party-test; then
+            echo "✅ Container started successfully"
+            docker logs jacob-party-test
+            docker stop jacob-party-test
+          else
+            echo "❌ Container crashed"
+            docker logs jacob-party-test
+            exit 1
+          fi
