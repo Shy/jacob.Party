@@ -53,7 +53,7 @@ jobs:
       - name: Build Docker Image
         run: |
           cd server
-          docker build -t jacob-party:ci-test .
+          docker build --no-cache -t jacob-party:ci-test .
 
       - name: Test Docker Image
         run: |
