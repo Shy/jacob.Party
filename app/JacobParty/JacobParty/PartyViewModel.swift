@@ -86,12 +86,6 @@ class PartyViewModel: ObservableObject {
             }
     }
 
-    private func distance(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) -> Double {
-        let from = CLLocation(latitude: from.latitude, longitude: from.longitude)
-        let to = CLLocation(latitude: to.latitude, longitude: to.longitude)
-        return from.distance(from: to)
-    }
-
     nonisolated private func setupNotificationObservers() {
         NotificationCenter.default.addObserver(
             forName: NSNotification.Name("KeepPartyingTapped"),

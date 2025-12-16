@@ -6,29 +6,36 @@ struct Location: Codable, Sendable {
     let lng: Double
 }
 
+// MARK: - Workflow Inputs
+
+/// Input for starting a party
 struct StartPartyInput: Codable, Sendable {
     let location: Location
     let source: String  // e.g., "ios-app", "web", "api"
     let reason: String  // e.g., "user-pressed-button", "api-call"
     let deviceId: String?
+    let autoStopHours: Int?  // Optional: for future long-running workflows
 }
 
+/// Input for stopping a party
 struct StopPartyInput: Codable, Sendable {
-    let source: String  // e.g., "ios-app", "web", "api"
-    let reason: String  // e.g., "user-stopped", "timeout", "api-call"
+    let source: String
+    let reason: String
     let deviceId: String?
 }
 
+/// Input for updating location
 struct UpdateLocationInput: Codable, Sendable {
     let location: Location
-    let source: String  // e.g., "ios-app", "web", "api"
-    let reason: String  // e.g., "background-update", "manual-update"
+    let source: String
+    let reason: String
     let deviceId: String?
 }
 
+/// Input for querying party state
 struct GetPartyStateInput: Codable, Sendable {
-    let source: String  // e.g., "ios-app", "web", "api"
-    let reason: String  // e.g., "health-check", "user-view", "app-start"
+    let source: String
+    let reason: String
     let deviceId: String?
 }
 

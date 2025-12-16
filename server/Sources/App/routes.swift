@@ -53,6 +53,7 @@ func routes(_ app: Application) throws {
     }
 
     // API endpoint to query workflow state (public - read-only with rate limiting)
+    // EDUCATIONAL: Demonstrates executing workflows for read operations
     rateLimited.get("api", "state") { req async throws -> PartyStateResponse in
         guard let client = req.application.storage[ClientKey.self] else {
             throw Abort(.internalServerError, reason: "Temporal client not configured")
@@ -72,7 +73,7 @@ func routes(_ app: Application) throws {
             source = "api"
         }
 
-        // Execute a workflow to query database state
+        // Execute workflow to query database state
         let input = GetPartyStateInput(source: source, reason: "user-view", deviceId: deviceId)
         let state = try await client.executeWorkflow(
             type: GetPartyStateWorkflow.self,
@@ -101,6 +102,7 @@ func routes(_ app: Application) throws {
     }
 
     // API endpoint to start party (HTTP bridge to Temporal) (protected)
+    // EDUCATIONAL: Demonstrates starting workflows
     protected.post("api", "party", "start") { req async throws -> HTTPStatus in
         guard let client = req.application.storage[ClientKey.self] else {
             throw Abort(.internalServerError, reason: "Temporal client not configured")
@@ -125,7 +127,7 @@ func routes(_ app: Application) throws {
         }
 
         // Start new workflow (non-blocking)
-        // Use consistent workflow ID to allow workflow to continue/signal existing workflows
+        // Use consistent workflow ID to ensure only one party runs at a time
         Task {
             do {
                 _ = try await client.startWorkflow(
@@ -138,7 +140,8 @@ func routes(_ app: Application) throws {
                         location: body.location,
                         source: source,
                         reason: body.reason,
-                        deviceId: deviceId
+                        deviceId: deviceId,
+                        autoStopHours: nil
                     )
                 )
                 req.logger.info("✅ Started PartyWorkflow", metadata: [
@@ -146,7 +149,7 @@ func routes(_ app: Application) throws {
                 ])
             } catch {
                 // If workflow already exists, that's okay - it means party is already running
-                req.logger.info("ℹ️  Workflow start result", metadata: [
+                req.logger.info("ℹ️  Party already running", metadata: [
                     "workflow_id": "\(workflowID)",
                     "error": "\(error)"
                 ])
@@ -158,6 +161,7 @@ func routes(_ app: Application) throws {
     }
 
     // API endpoint to stop party (HTTP bridge to Temporal) (protected)
+    // EDUCATIONAL: Demonstrates workflow execution pattern
     protected.post("api", "party", "stop") { req async throws -> HTTPStatus in
         guard let client = req.application.storage[ClientKey.self] else {
             throw Abort(.internalServerError, reason: "Temporal client not configured")
@@ -175,7 +179,7 @@ func routes(_ app: Application) throws {
             source = "api"
         }
 
-        // Start a workflow to record party end (non-blocking)
+        // Start workflow to record party end
         Task {
             do {
                 _ = try await client.startWorkflow(
@@ -201,6 +205,7 @@ func routes(_ app: Application) throws {
     }
 
     // API endpoint to update location (HTTP bridge to Temporal) (protected)
+    // EDUCATIONAL: Demonstrates workflow execution pattern
     protected.post("api", "party", "location") { req async throws -> HTTPStatus in
         guard let client = req.application.storage[ClientKey.self] else {
             throw Abort(.internalServerError, reason: "Temporal client not configured")
@@ -221,7 +226,7 @@ func routes(_ app: Application) throws {
             source = "api"
         }
 
-        // Start a workflow to update location in database (non-blocking)
+        // Start workflow to update location
         Task {
             do {
                 _ = try await client.startWorkflow(
@@ -250,19 +255,21 @@ func routes(_ app: Application) throws {
 
 // MARK: - Request/Response Models
 
+struct StartPartyRequest: Content {
+    let location: Location
+    let reason: String
+}
+
+struct UpdateLocationRequest: Content {
+    let location: Location
+    let reason: String
+}
+
+// MARK: - Request/Response Models
+
 struct HealthResponse: Content {
     let status: String
     let temporalClient: String
     let temporalWorker: String
     let timestamp: String
-}
-
-struct StartPartyRequest: Content {
-    let location: Location
-    let reason: String  // e.g., "user-pressed-button", "automatic-start"
-}
-
-struct UpdateLocationRequest: Content {
-    let location: Location
-    let reason: String  // e.g., "background-update", "manual-update"
 }

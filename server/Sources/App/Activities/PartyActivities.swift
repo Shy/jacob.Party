@@ -22,7 +22,7 @@ struct PartyActivities {
         let startTime: Date?
     }
 
-    struct UpdateLocationInput: Codable {
+    struct UpdateLocationActivityInput: Codable {
         let location: Location
     }
 
@@ -67,7 +67,7 @@ struct PartyActivities {
 
     /// Updates the party location (updates state file).
     @Activity
-    func updateLocation(input: UpdateLocationInput) async throws {
+    func updateLocation(input: UpdateLocationActivityInput) async throws {
         print("📍 Location updated to lat: \(input.location.lat), lng: \(input.location.lng)")
 
         // Load current state
