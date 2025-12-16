@@ -36,7 +36,7 @@ class PartyViewModel: ObservableObject {
         setupLocationObserver()
 
         // Request location permission and fetch initial state
-        Task {
+        Task {  
             await initialize()
         }
     }
