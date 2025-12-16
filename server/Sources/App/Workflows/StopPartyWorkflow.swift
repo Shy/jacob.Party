@@ -4,10 +4,21 @@ import Temporal
 /// Workflow that stops a party session (updates database).
 @Workflow
 final class StopPartyWorkflow {
-    init(input: Void) {}
+    private let input: StopPartyInput
 
-    func run(input: Void) async throws -> String {
+    init(input: StopPartyInput) {
+        self.input = input
+    }
+
+    func run(input: StopPartyInput) async throws -> String {
         let endTime = Date()
+
+        // Log party stop with tracking information
+        Workflow.logger.info("Party stopped", metadata: [
+            "source": .string(input.source),
+            "reason": .string(input.reason),
+            "deviceId": .string(input.deviceId ?? "none")
+        ])
 
         // Record party end - we don't know the startTime, so pass current time for both
         // The activity will handle clearing the state

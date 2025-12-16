@@ -225,7 +225,8 @@ class PartyViewModel: ObservableObject {
             "location": [
                 "lat": latitude,
                 "lng": longitude
-            ]
+            ],
+            "reason": "user-pressed-button"
         ]
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -274,7 +275,8 @@ class PartyViewModel: ObservableObject {
             "location": [
                 "lat": location.latitude,
                 "lng": location.longitude
-            ]
+            ],
+            "reason": "background-update"
         ]
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

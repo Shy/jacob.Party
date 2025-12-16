@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var viewModel = PartyViewModel()
+    @State private var showCopiedMessage = false
 
     var body: some View {
         ZStack {
@@ -50,6 +51,38 @@ struct ContentView: View {
                     .padding(.top, 16)
 
                 Spacer()
+
+                // Device ID (tap to copy)
+                VStack(spacing: 8) {
+                    if showCopiedMessage {
+                        Text("Copied!")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.green)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+
+                    Button {
+                        UIPasteboard.general.string = DeviceIdentifier.shared.uuid
+                        withAnimation {
+                            showCopiedMessage = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation {
+                                showCopiedMessage = false
+                            }
+                        }
+                    } label: {
+                        VStack(spacing: 4) {
+                            Text("Device ID (tap to copy)")
+                                .font(.system(size: 10, weight: .regular))
+                                .foregroundColor(.white.opacity(0.5))
+                            Text(DeviceIdentifier.shared.uuid)
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                    }
+                }
+                .padding(.bottom, 40)
             }
         }
         .ignoresSafeArea()

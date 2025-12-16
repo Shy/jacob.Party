@@ -60,13 +60,27 @@ func routes(_ app: Application) throws {
 
         let appName = req.application.storage[AppNameKey.self] ?? "jacob"
 
+        // Determine source based on request headers
+        let deviceId = req.headers["X-Device-ID"].first
+        let userAgent = req.headers["User-Agent"].first ?? ""
+        let source: String
+        if deviceId != nil {
+            source = "ios-app"
+        } else if userAgent.contains("Mozilla") || userAgent.contains("Chrome") {
+            source = "web"
+        } else {
+            source = "api"
+        }
+
         // Execute a workflow to query database state
+        let input = GetPartyStateInput(source: source, reason: "user-view", deviceId: deviceId)
         let state = try await client.executeWorkflow(
             type: GetPartyStateWorkflow.self,
             options: .init(
                 id: "query-\(UUID().uuidString)",
                 taskQueue: "party-queue"
-            )
+            ),
+            input: input
         )
 
         // Format startTime as ISO8601 string
@@ -98,6 +112,18 @@ func routes(_ app: Application) throws {
         let appName = req.application.storage[AppNameKey.self] ?? "jacob"
         let workflowID = "\(appName)-party"
 
+        // Determine source based on request headers
+        let deviceId = req.headers["X-Device-ID"].first
+        let userAgent = req.headers["User-Agent"].first ?? ""
+        let source: String
+        if deviceId != nil {
+            source = "ios-app"
+        } else if userAgent.contains("Mozilla") || userAgent.contains("Chrome") {
+            source = "web"
+        } else {
+            source = "api"
+        }
+
         // Start new workflow (non-blocking)
         // Use consistent workflow ID to allow workflow to continue/signal existing workflows
         Task {
@@ -108,7 +134,12 @@ func routes(_ app: Application) throws {
                         id: workflowID,
                         taskQueue: "party-queue"
                     ),
-                    input: StartPartyInput(location: body.location)
+                    input: StartPartyInput(
+                        location: body.location,
+                        source: source,
+                        reason: body.reason,
+                        deviceId: deviceId
+                    )
                 )
                 req.logger.info("✅ Started PartyWorkflow", metadata: [
                     "workflow_id": "\(workflowID)"
@@ -132,6 +163,18 @@ func routes(_ app: Application) throws {
             throw Abort(.internalServerError, reason: "Temporal client not configured")
         }
 
+        // Determine source based on request headers
+        let deviceId = req.headers["X-Device-ID"].first
+        let userAgent = req.headers["User-Agent"].first ?? ""
+        let source: String
+        if deviceId != nil {
+            source = "ios-app"
+        } else if userAgent.contains("Mozilla") || userAgent.contains("Chrome") {
+            source = "web"
+        } else {
+            source = "api"
+        }
+
         // Start a workflow to record party end (non-blocking)
         Task {
             do {
@@ -140,6 +183,11 @@ func routes(_ app: Application) throws {
                     options: .init(
                         id: "stop-party-\(UUID().uuidString)",
                         taskQueue: "party-queue"
+                    ),
+                    input: StopPartyInput(
+                        source: source,
+                        reason: "user-stopped",
+                        deviceId: deviceId
                     )
                 )
                 req.logger.info("✅ Started StopPartyWorkflow")
@@ -161,6 +209,18 @@ func routes(_ app: Application) throws {
         // Parse request body
         let body = try req.content.decode(UpdateLocationRequest.self)
 
+        // Determine source based on request headers
+        let deviceId = req.headers["X-Device-ID"].first
+        let userAgent = req.headers["User-Agent"].first ?? ""
+        let source: String
+        if deviceId != nil {
+            source = "ios-app"
+        } else if userAgent.contains("Mozilla") || userAgent.contains("Chrome") {
+            source = "web"
+        } else {
+            source = "api"
+        }
+
         // Start a workflow to update location in database (non-blocking)
         Task {
             do {
@@ -170,7 +230,12 @@ func routes(_ app: Application) throws {
                         id: "update-location-\(UUID().uuidString)",
                         taskQueue: "party-queue"
                     ),
-                    input: PartyActivities.UpdateLocationInput(location: body.location)
+                    input: UpdateLocationInput(
+                        location: body.location,
+                        source: source,
+                        reason: body.reason,
+                        deviceId: deviceId
+                    )
                 )
                 req.logger.info("✅ Started UpdateLocationWorkflow")
             } catch {
@@ -194,8 +259,10 @@ struct HealthResponse: Content {
 
 struct StartPartyRequest: Content {
     let location: Location
+    let reason: String  // e.g., "user-pressed-button", "automatic-start"
 }
 
 struct UpdateLocationRequest: Content {
     let location: Location
+    let reason: String  // e.g., "background-update", "manual-update"
 }
