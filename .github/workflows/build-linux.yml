@@ -33,22 +33,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker Image
-        run: |
-          cd server
-          docker build --no-cache -t jacob-party:latest .
-
-      - name: Push to GitHub Container Registry
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          cd server
-          # Convert owner to lowercase for GHCR compatibility
-          OWNER_LOWERCASE=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-
-          # Tag with commit SHA and latest
-          docker tag jacob-party:latest ghcr.io/${OWNER_LOWERCASE}/jacob-party:${{ github.sha }}
-          docker tag jacob-party:latest ghcr.io/${OWNER_LOWERCASE}/jacob-party:latest
-
-          # Push both tags
-          docker push ghcr.io/${OWNER_LOWERCASE}/jacob-party:${{ github.sha }}
-          docker push ghcr.io/${OWNER_LOWERCASE}/jacob-party:latest
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/jacob-party:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/jacob-party:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
