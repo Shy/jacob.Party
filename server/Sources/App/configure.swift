@@ -103,6 +103,10 @@ public func configure(_ app: Application) async throws {
     app.storage[AppNameKey.self] = appName
     app.storage[GoogleMapsApiKeyKey.self] = googleMapsApiKey
 
+    // Initialize subscription manager
+    app.storage[SubscriptionManagerKey.self] = SubscriptionManager()
+    logger.info("✅ Subscription manager initialized")
+
     // Load allowed device IDs from environment
     let allowedDeviceIDsStr = Environment.get("ALLOWED_DEVICE_IDS") ?? ""
     let allowedDeviceIDs =

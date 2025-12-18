@@ -72,6 +72,7 @@
 
         /* Floating Card */
         #party-card {
+            position: relative;
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
@@ -271,6 +272,68 @@
             display: none;
         }
 
+        /* Push Notification Button */
+        #push-notification-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 45px;
+            height: 45px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            font-size: 1.3rem;
+            cursor: pointer;
+            box-shadow: 0 4px 16px 0 rgba(31, 38, 135, 0.3);
+            transition: all 0.3s ease;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        #push-notification-btn:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.5);
+        }
+
+        #push-notification-btn.subscribed {
+            background: rgba(76, 175, 80, 0.4);
+            border-color: rgba(76, 175, 80, 0.8);
+            box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+        }
+
+        #push-notification-btn.subscribed:hover {
+            background: rgba(76, 175, 80, 0.5);
+            box-shadow: 0 0 25px rgba(76, 175, 80, 0.6);
+        }
+
+        #push-notification-btn.subscribed::after {
+            content: '✓';
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            background: rgba(76, 175, 80, 1);
+            color: white;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid rgba(255, 255, 255, 0.9);
+        }
+
+        #push-notification-btn.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             body {
@@ -355,6 +418,11 @@
     <!-- Main Content -->
     <div id="main-container">
         <div id="party-card" class="not-partying">
+            <!-- Push Notification Toggle Button -->
+            <button id="push-notification-btn" onclick="togglePushNotifications()" title="Enable push notifications">
+                🔔
+            </button>
+
             <div id="status-emoji">🎉</div>
             <div id="status-text">{{APP_NAME}} is not partying</div>
 
@@ -384,6 +452,112 @@
         </div>
     </div>
 
+    <script>
+        const VAPID_PUBLIC_KEY = 'BLW2JtLp8q6mSD0j/Zbf8hyRQR3uEau9Spsd4ijofisfzRmY8cCUfwMcF8SOn4r9JVFXNycbQk8YS2L68eOwoYY=';
+
+        // Convert base64 to Uint8Array for VAPID key
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding)
+                .replace(/\-/g, '+')
+                .replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
+        async function togglePushNotifications() {
+            const btn = document.getElementById('push-notification-btn');
+
+            try {
+                if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                    alert('Push notifications not supported in this browser');
+                    return;
+                }
+
+                const registration = await navigator.serviceWorker.getRegistration();
+                let subscription = null;
+
+                if (registration) {
+                    subscription = await registration.pushManager.getSubscription();
+                }
+
+                if (subscription) {
+                    // Unsubscribe
+                    await subscription.unsubscribe();
+                    btn.classList.remove('subscribed');
+                    btn.title = 'Enable push notifications';
+                    console.log('🔕 Unsubscribed from push notifications');
+                } else {
+                    // Subscribe
+                    const permission = await Notification.requestPermission();
+                    if (permission !== 'granted') {
+                        alert('Please allow notifications to receive party updates');
+                        return;
+                    }
+
+                    // Register service worker
+                    const reg = await navigator.serviceWorker.register('/sw.js');
+                    await navigator.serviceWorker.ready;
+
+                    // Subscribe to push
+                    subscription = await reg.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                    });
+
+                    // Send subscription to server
+                    const response = await fetch('/api/subscribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: crypto.randomUUID(),
+                            endpoint: subscription.endpoint,
+                            authKey: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('auth')))),
+                            p256dhKey: btoa(String.fromCharCode(...new Uint8Array(subscription.getKey('p256dh')))),
+                            createdAt: new Date().toISOString()
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Server responded with ${response.status}`);
+                    }
+
+                    btn.classList.add('subscribed');
+                    btn.title = 'Disable push notifications';
+                    console.log('🔔 Subscribed to push notifications');
+                }
+            } catch (error) {
+                console.error('Push notification error:', error);
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        // Check subscription status on load
+        async function checkPushSubscription() {
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                document.getElementById('push-notification-btn').classList.add('hidden');
+                return;
+            }
+
+            try {
+                const registration = await navigator.serviceWorker.getRegistration();
+                if (registration) {
+                    const subscription = await registration.pushManager.getSubscription();
+                    const btn = document.getElementById('push-notification-btn');
+                    if (subscription) {
+                        btn.classList.add('subscribed');
+                        btn.title = 'Disable push notifications';
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking push subscription:', error);
+            }
+        }
+    </script>
     <script>
         let map = null;
         let fullscreenMap = null;
@@ -676,6 +850,7 @@
         // Initialize
         createParticles();
         checkPartyStatus(); // First check happens immediately
+        checkPushSubscription(); // Check if already subscribed to push
 
         // Update time display every 30 seconds
         setInterval(updateTimeDisplay, 30000);

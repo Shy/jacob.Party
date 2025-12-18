@@ -45,3 +45,31 @@ struct PartyStateResponse: Content {
     let appName: String
     let startTime: String?  // ISO8601 timestamp
 }
+
+// MARK: - Push Notifications
+
+/// Push notification subscription
+struct PushSubscription: Codable, Sendable {
+    let id: String
+    let endpoint: String
+    let authKey: String
+    let p256dhKey: String
+    let createdAt: String  // ISO8601 string from JavaScript
+}
+
+/// Party event for history/audit log
+struct PartyEvent: Codable, Sendable {
+    enum EventType: String, Codable {
+        case started
+        case stopped
+        case locationUpdated
+        case subscriptionAdded
+        case subscriptionRemoved
+    }
+
+    let type: EventType
+    let location: Location?
+    let timestamp: Date
+    let source: String
+    let deviceId: String?
+}

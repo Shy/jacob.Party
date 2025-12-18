@@ -33,6 +33,21 @@ func routes(_ app: Application) throws {
     // Create rate-limited group for state endpoint (30 requests per minute)
     let rateLimited = app.grouped(RateLimitMiddleware(maxRequests: 30, windowSeconds: 60))
 
+    // Serve service worker for push notifications
+    app.get("sw.js") { req async throws -> Response in
+        let swPath = "Public/sw.js"
+        let content = try String(contentsOfFile: swPath, encoding: .utf8)
+
+        return Response(
+            status: .ok,
+            headers: [
+                "Content-Type": "application/javascript; charset=utf-8",
+                "Service-Worker-Allowed": "/"
+            ],
+            body: .init(string: content)
+        )
+    }
+
     // Serve index.html with dynamic configuration injected (public)
     app.get { req async throws -> Response in
         let htmlPath = "Resources/Views/index.html"
@@ -250,6 +265,68 @@ func routes(_ app: Application) throws {
 
         req.logger.info("📍 Location update requested: \(body.location)")
         return .ok
+    }
+
+    // MARK: - Push Notification Endpoints
+
+    // Subscribe to push notifications
+    // EDUCATIONAL: Public endpoint for users to opt-in to notifications
+    app.post("api", "subscribe") { req async throws -> HTTPStatus in
+        guard let manager = req.application.storage[SubscriptionManagerKey.self] else {
+            throw Abort(.internalServerError, reason: "Subscription manager not configured")
+        }
+
+        let subscription = try req.content.decode(PushSubscription.self)
+        try await manager.add(subscription)
+
+        let count = try await manager.count()
+        req.logger.info("➕ Added push subscription", metadata: [
+            "id": .string(subscription.id),
+            "total": .stringConvertible(count)
+        ])
+
+        return .created
+    }
+
+    // Unsubscribe from push notifications
+    app.delete("api", "subscribe", ":id") { req async throws -> HTTPStatus in
+        guard let manager = req.application.storage[SubscriptionManagerKey.self] else {
+            throw Abort(.internalServerError, reason: "Subscription manager not configured")
+        }
+
+        guard let id = req.parameters.get("id") else {
+            throw Abort(.badRequest, reason: "Missing subscription ID")
+        }
+
+        try await manager.remove(id: id)
+
+        let count = try await manager.count()
+        req.logger.info("➖ Removed push subscription", metadata: [
+            "id": .string(id),
+            "total": .stringConvertible(count)
+        ])
+
+        return .ok
+    }
+
+    // SSE endpoint for real-time updates
+    // EDUCATIONAL: Server-Sent Events for live party state updates
+    app.get("api", "events") { req async throws -> Response in
+        let response = Response()
+        response.headers.contentType = .init(type: "text", subType: "event-stream")
+        response.headers.replaceOrAdd(name: .cacheControl, value: "no-cache")
+        response.headers.replaceOrAdd(name: .connection, value: "keep-alive")
+
+        // TODO: Implement full SSE streaming with state polling
+        // For now, send initial connection event
+        // In full implementation, this would:
+        // 1. Poll workflow state every few seconds
+        // 2. Send SSE events when state changes
+        // 3. Keep connection alive with heartbeats
+
+        let connectEvent = "event: connected\ndata: {\"status\":\"connected\"}\n\n"
+        response.body = .init(string: connectEvent)
+        return response
     }
 }
 

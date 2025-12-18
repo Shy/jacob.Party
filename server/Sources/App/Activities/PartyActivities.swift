@@ -1,5 +1,6 @@
 import Foundation
 import Temporal
+import Vapor
 
 /// Activities for party workflow demonstrating database operations.
 @ActivityContainer
@@ -24,6 +25,11 @@ struct PartyActivities {
 
     struct UpdateLocationActivityInput: Codable {
         let location: Location
+    }
+
+    struct SendPushNotificationInput: Codable {
+        let message: String
+        let subscriptions: [PushSubscription]
     }
 
     // MARK: - Activities
@@ -86,6 +92,51 @@ struct PartyActivities {
             startTime: state.startTime
         )
         try saveState(state)
+    }
+
+    /// Gets all push notification subscriptions
+    @Activity
+    func getSubscriptions(input: ()) async throws -> [PushSubscription] {
+        return try SubscriptionManager.loadAll()
+    }
+
+    /// Sends push notifications to subscribers.
+    /// EDUCATIONAL: Demonstrates external API calls in activities with proper error handling
+    @Activity
+    func sendPushNotification(input: SendPushNotificationInput) async throws {
+        print("📬 Sending push notification to \(input.subscriptions.count) subscribers")
+        print("   Message: \(input.message)")
+
+        // EDUCATIONAL: For production, you'd want proper dependency injection
+        // For this demo, we check environment and gracefully skip if VAPID not configured
+
+        let vapidPublicKey = Environment.get("VAPID_PUBLIC_KEY")
+        let vapidPrivateKey = Environment.get("VAPID_PRIVATE_KEY")
+
+        guard let publicKey = vapidPublicKey, !publicKey.isEmpty,
+              let privateKey = vapidPrivateKey, !privateKey.isEmpty else {
+            print("⚠️ VAPID keys not configured - skipping push notifications")
+            print("   Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY environment variables")
+            print("   Or leave unconfigured to test workflows without push")
+            return
+        }
+
+        // Create web push sender (uses swift-webpush library)
+        do {
+            let sender = try WebPushSender()
+
+            // Send notifications with proper VAPID authentication and encryption
+            try await sender.sendBatch(message: input.message, subscriptions: input.subscriptions)
+            print("✅ Push notifications sent to all subscribers")
+        } catch {
+            print("❌ Error sending push notifications: \(error)")
+            // Don't throw - we don't want to fail the workflow if push fails
+            // In production, you might want to log to error tracking service
+        }
+
+        // EDUCATIONAL: Activities should be idempotent
+        // Multiple calls with same input should be safe
+        // Web push services handle deduplication
     }
 
     // MARK: - Helper Methods (File-based state for now)

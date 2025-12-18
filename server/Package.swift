@@ -6,15 +6,21 @@ let package = Package(
     platforms: [.macOS(.v15)],
     dependencies: [
         .package(url: "https://github.com/vapor/vapor.git", from: "4.99.0"),
-        .package(url: "https://github.com/apple/swift-temporal-sdk.git", from: "0.5.0")
+        .package(url: "https://github.com/apple/swift-temporal-sdk.git", from: "0.5.0"),
+        .package(url: "https://github.com/mochidev/swift-webpush.git", from: "0.4.1")
     ],
     targets: [
         .executableTarget(
             name: "App",
             dependencies: [
                 .product(name: "Vapor", package: "vapor"),
-                .product(name: "Temporal", package: "swift-temporal-sdk")
+                .product(name: "Temporal", package: "swift-temporal-sdk"),
+                .product(name: "WebPush", package: "swift-webpush")
             ]
+        ),
+        .executableTarget(
+            name: "DerivePublicKey",
+            dependencies: []
         )
     ]
 )
