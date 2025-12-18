@@ -15,6 +15,9 @@ COPY Sources ./Sources
 # Copy Resources directory for static files (HTML, etc.)
 COPY Resources ./Resources
 
+# Copy Public directory for service worker and static assets
+COPY Public ./Public
+
 # Build release with parallel compilation and cache mount
 RUN --mount=type=cache,target=/root/.swiftpm \
     --mount=type=cache,target=/root/.cache \
@@ -46,6 +49,9 @@ COPY --from=builder /app/.build/release/App /app/App
 
 # Copy Resources directory
 COPY --from=builder /app/Resources /app/Resources
+
+# Copy Public directory for service worker
+COPY --from=builder /app/Public /app/Public
 
 # Create non-root user for security (use UID 1001 to avoid conflicts)
 RUN useradd -m -u 1001 appuser && \
