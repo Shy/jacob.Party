@@ -20,7 +20,7 @@ self.addEventListener('push', (event) => {
         body: 'Party event notification',
         icon: '/icon.png',
         badge: '/badge.png',
-        data: { url: 'http://localhost:8080' }
+        data: { url: self.location.origin }
     };
 
     // Parse push data if available
@@ -53,7 +53,7 @@ self.addEventListener('notificationclick', (event) => {
 
     event.notification.close();
 
-    const urlToOpen = event.notification.data?.url || 'http://localhost:8080';
+    const urlToOpen = event.notification.data?.url || self.location.origin;
 
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true })
@@ -82,7 +82,7 @@ self.addEventListener('pushsubscriptionchange', (event) => {
             applicationServerKey: event.oldSubscription.options.applicationServerKey
         }).then((subscription) => {
             // Send new subscription to server
-            return fetch('http://localhost:8080/api/subscribe', {
+            return fetch('/api/subscribe', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

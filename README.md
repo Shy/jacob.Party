@@ -154,6 +154,30 @@ Four Temporal workflows handle all party operations:
 
 All workflows complete immediately. Activities handle JSON file storage.
 
+## API Testing
+
+Test the party lifecycle with [HTTPie](https://httpie.io):
+
+```bash
+# Check current state
+http GET localhost:8080/api/state
+
+# Start a party
+http --ignore-stdin POST localhost:8080/api/party/start \
+  location:='{"lat":37.7749,"lng":-122.4194}' \
+  reason=testing
+
+# Update location
+http --ignore-stdin POST localhost:8080/api/party/location \
+  location:='{"lat":37.7849,"lng":-122.4094}' \
+  reason=testing
+
+# Stop party
+http POST localhost:8080/api/party/stop
+```
+
+**Note:** Device authentication is disabled by default (see `ALLOWED_DEVICE_IDS` in `.env`).
+
 ## Key Files
 
 - [server/Sources/App/configure.swift](server/Sources/App/configure.swift) - Temporal client and worker setup
