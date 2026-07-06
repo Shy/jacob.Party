@@ -120,7 +120,12 @@ func routes(_ app: Application) throws {
                     ),
                     options: .init(
                         id: workflowID,
-                        taskQueue: "party-queue"
+                        taskQueue: "party-queue",
+                        // A tap on "start party" means the user wants a new session.
+                        // If a stale execution is stuck under this ID (e.g. after a
+                        // workflow rewrite that broke replay), terminate it and start fresh
+                        // instead of silently signalling into a dead history.
+                        idConflictPolicy: .terminateExisting
                     ),
                     signalType: PartyWorkflow.UpdateLocation.self,
                     signalInput: body.location
