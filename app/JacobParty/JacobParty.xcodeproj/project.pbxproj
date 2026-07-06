@@ -276,6 +276,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = 5KWPUH7RF4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = JacobParty/Info.plist;
@@ -310,6 +311,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = 5KWPUH7RF4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = JacobParty/Info.plist;
@@ -338,25 +340,6 @@
 		};
 /* End XCBuildConfiguration section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		92D2A0022ED0000000000001 /* XCRemoteSwiftPackageReference "swift-temporal-sdk" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/apple/swift-temporal-sdk.git";
-			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 1.0.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		92D2A0002ED0000000000001 /* Temporal */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 92D2A0022ED0000000000001 /* XCRemoteSwiftPackageReference "swift-temporal-sdk" */;
-			productName = Temporal;
-		};
-/* End XCSwiftPackageProductDependency section */
-
 /* Begin XCConfigurationList section */
 		92F56CEC2E945D4900A8D3E0 /* Build configuration list for PBXProject "JacobParty" */ = {
 			isa = XCConfigurationList;
@@ -377,6 +360,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		92D2A0022ED0000000000001 /* XCRemoteSwiftPackageReference "swift-temporal-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-temporal-sdk.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		92D2A0002ED0000000000001 /* Temporal */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 92D2A0022ED0000000000001 /* XCRemoteSwiftPackageReference "swift-temporal-sdk" */;
+			productName = Temporal;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 92F56CE92E945D4900A8D3E0 /* Project object */;
 }
