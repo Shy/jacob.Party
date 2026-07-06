@@ -2,6 +2,7 @@ import Foundation
 import Security
 
 /// Manages a persistent device identifier stored in the keychain.
+@MainActor
 class DeviceIdentifier {
     static let shared = DeviceIdentifier()
 

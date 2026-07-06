@@ -5,3 +5,20 @@
 // For local development, use localhost. For production, use your deployed URL.
 // SERVER_URL = http:/$()/127.0.0.1:8080
 SERVER_URL = https:/$()/jacob.party
+
+// App identity used for both the public web title and Temporal workflow ID.
+APP_NAME = jacob
+
+// Direct Temporal mode. Leave disabled to use the Vapor HTTP API path.
+// For the iOS SDK 1.0 video path, set this to YES in a local xcconfig.
+TEMPORAL_DIRECT_ENABLED = NO
+
+// Local dev server defaults. For real-device local testing, use your Mac's LAN
+// IP address instead of 127.0.0.1. For Temporal Cloud, set TLS to YES and add an
+// API key in an uncommitted local config.
+TEMPORAL_HOST = 127.0.0.1
+TEMPORAL_PORT = 7233
+TEMPORAL_NAMESPACE = default
+TEMPORAL_TASK_QUEUE = party-ios-queue
+TEMPORAL_TLS_ENABLED = NO
+TEMPORAL_API_KEY =

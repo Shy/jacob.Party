@@ -176,9 +176,7 @@ public func configure(_ app: Application) async throws {
                 activityContainers: PartyActivities(),
                 workflows: [
                     PartyWorkflow.self,
-                    UpdateLocationWorkflow.self,
-                    StopPartyWorkflow.self,
-                    GetPartyStateWorkflow.self
+                    SendPartyNotificationsWorkflow.self,
                 ],
                 logger: logger
             )
@@ -209,9 +207,7 @@ public func configure(_ app: Application) async throws {
                 activityContainers: PartyActivities(),
                 workflows: [
                     PartyWorkflow.self,
-                    UpdateLocationWorkflow.self,
-                    StopPartyWorkflow.self,
-                    GetPartyStateWorkflow.self
+                    SendPartyNotificationsWorkflow.self,
                 ],
                 logger: logger
             )
@@ -252,8 +248,8 @@ public func configure(_ app: Application) async throws {
             transportSecurity: .plaintext,
             activityContainers: PartyActivities(),
             workflows: [
-                PartyWorkflow.self, GetPartyStateWorkflow.self, StopPartyWorkflow.self,
-                UpdateLocationWorkflow.self,
+                PartyWorkflow.self,
+                SendPartyNotificationsWorkflow.self,
             ],
             logger: logger
         )

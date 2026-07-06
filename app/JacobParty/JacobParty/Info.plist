@@ -4,6 +4,22 @@
 <dict>
 	<key>SERVER_URL</key>
 	<string>$(SERVER_URL)</string>
+	<key>APP_NAME</key>
+	<string>$(APP_NAME)</string>
+	<key>TEMPORAL_DIRECT_ENABLED</key>
+	<string>$(TEMPORAL_DIRECT_ENABLED)</string>
+	<key>TEMPORAL_HOST</key>
+	<string>$(TEMPORAL_HOST)</string>
+	<key>TEMPORAL_PORT</key>
+	<string>$(TEMPORAL_PORT)</string>
+	<key>TEMPORAL_NAMESPACE</key>
+	<string>$(TEMPORAL_NAMESPACE)</string>
+	<key>TEMPORAL_TASK_QUEUE</key>
+	<string>$(TEMPORAL_TASK_QUEUE)</string>
+	<key>TEMPORAL_TLS_ENABLED</key>
+	<string>$(TEMPORAL_TLS_ENABLED)</string>
+	<key>TEMPORAL_API_KEY</key>
+	<string>$(TEMPORAL_API_KEY)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Jacob Party needs your location to show where you're partying on the map.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS(.v15)],
     dependencies: [
         .package(url: "https://github.com/vapor/vapor.git", from: "4.99.0"),
-        .package(url: "https://github.com/apple/swift-temporal-sdk.git", from: "0.5.0"),
+        .package(url: "https://github.com/apple/swift-temporal-sdk.git", .upToNextMinor(from: "1.0.0")),
         .package(url: "https://github.com/mochidev/swift-webpush.git", from: "0.4.1"),
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0")
     ],

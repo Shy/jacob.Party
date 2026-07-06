@@ -1,202 +1,157 @@
 # jacob.party
 
-A demonstration project using [Apple's Swift SDK for Temporal](https://github.com/apple/swift-temporal-sdk) showing how to build a real-world application with Temporal workflows, activities, and workers in Swift.
+A demonstration project for [Apple's Swift SDK for Temporal](https://github.com/apple/swift-temporal-sdk) (1.0).
 
-**The App**: Let your friends know when you're out partying so they can come join you. Start the party on your iPhone, and your friends can see your location on the web in real-time.
+**The app**: let your friends know when you're out partying so they can come join you. Start the party on your phone; your friends watch your live location on the web.
 
-Three components communicate through Temporal:
-- **Vapor Server** - HTTP API that triggers Temporal workflows
-- **iOS App** - SwiftUI app with background location tracking
-- **Web Interface** - Real-time party status display with Google Maps integration
+The 1.0 version is shaped around three parts:
+- **iOS app** (SwiftUI) — can run a `TemporalClient` and `TemporalWorker` on-device, or fall back to the original HTTP API path
+- **Vapor server** — serves the public web map, queries Temporal for party state, and still exposes compatibility HTTP endpoints
+- **Web UI** — Google Maps view of the live party state
 
-## Monorepo Structure
+## What this demonstrates
+
+The whole party — start, location updates, reason changes, auto-stop, and shutdown — is one durable Temporal workflow. With the Temporal Swift SDK 1.0, the phone itself can be more than an HTTP client: it can connect to Temporal directly, start/signal/query workflows, and run a worker for iOS-compatible workflow/activity code.
+
+| Temporal feature | Where to look |
+|---|---|
+| **Long-running `@Workflow` struct** | [`PartyWorkflow`](server/Sources/App/Workflows/PartyWorkflow.swift) lives for the duration of the party. State (`isPartying`, `currentLocation`, `reason`, `autoStopAt`) is plain `var` properties on the struct. |
+| **Temporal on iOS** | [`TemporalPartyService`](app/JacobParty/JacobParty/TemporalPartyService.swift) starts a `TemporalClient` and `TemporalWorker` from the app when `TEMPORAL_DIRECT_ENABLED=YES`. |
+| **Signals** (`@WorkflowSignal mutating func`) | `updateLocation(input: Location)` and `stopParty()` in `PartyWorkflow`. Each `POST /api/party/location` translates to one signal — no new workflow execution per request. |
+| **Queries** (`@WorkflowQuery func`) | `getPartyState()` returns a `PartyStateOutput`. `GET /api/state` calls this — read-only, no event written, no activity scheduled. |
+| **Updates** (`@WorkflowUpdate mutating func`) | `setReason` and `extendAutoStop` validate input then mutate state, returning a value. Validation throws `ApplicationError(isNonRetryable: true)` so the client gets a clean rejection. |
+| **`signalWithStartWorkflow`** | `POST /api/party/start` ([routes.swift](server/Sources/App/routes.swift)). Starts the workflow if it isn't running, signals `updateLocation` if it is — idempotent in either case. |
+| **Workflow timers** | `context.sleep(for:)` inside a `TaskGroup` arms an auto-stop timer. The race between the timer task and the stop-signal-driven `context.condition` is the workflow's main loop. |
+| **`context.condition`** | The workflow blocks on `context.condition { $0.shouldExit }`. The closure receives the workflow struct, so any signal/update that flips `shouldExit` releases the wait. |
+| **Child workflows** | `SendPartyNotificationsWorkflow` is spawned from the parent via `context.executeChildWorkflow(...)`. Isolates push-notification fan-out with its own retry/timeout policy. |
+| **Async activity with heartbeats** | `sendPushNotification` in [`PartyActivities`](server/Sources/App/Activities/PartyActivities.swift) calls `ActivityExecutionContext.current?.heartbeat(details: index)` after each subscription. Retries resume from the last heartbeat detail via `info.heartbeatDetails(as: Int.self)`. |
+| **Activity retry policies** | Every `executeActivity` call passes a `RetryPolicy` — see `RecordPartyStart` and `SendPushNotification`. |
+| **Multiple auth modes** | [`configure.swift`](server/Sources/App/configure.swift) supports plaintext (local dev), TLS + API key, and mTLS — all via env vars. |
+| **Worker + client in the same process** | The Vapor server hosts both a `TemporalClient` and a `TemporalWorker`, started in background tasks with retry. |
+
+## Architecture
 
 ```
-├── server/                   # Vapor server + Temporal worker
-│   ├── Sources/App/          # Server application code
-│   │   ├── Workflows/        # Temporal workflow definitions
-│   │   ├── Activities/       # Temporal activity implementations
-│   │   └── Middleware/       # Auth & rate limiting
-│   ├── Resources/Views/      # Web interface (HTML)
-│   ├── Dockerfile            # Docker image for server
-│   └── docker-compose.yml    # Server orchestration
-├── app/                      # iOS app (SwiftUI)
-│   └── JacobParty/           # Xcode project
-├── certs/                    # Temporal Cloud mTLS certificates (gitignored)
-├── .env                      # Environment configuration (gitignored)
-└── .env.example              # Environment template
+iOS button / HTTP request        Temporal action                  Effect
+───────────────────              ──────────────────               ─────────────────
+start party                   →  signalWithStartWorkflow       →  Workflow starts (or refreshes)
+location update               →  handle.signal(UpdateLocation) →  Mutates state, no new workflow
+reason change                 →  handle.executeUpdate(SetReason)  Validates + mutates, returns msg
+extend party                  →  handle.executeUpdate(ExtendAutoStop)  Pushes timer further out
+stop party                    →  handle.signal(StopParty)      →  shouldExit=true, run() returns
+web map poll                  →  handle.query(GetPartyState)   →  Read-only snapshot
 ```
 
-## What This Demonstrates
+Inside `PartyWorkflow.run`:
+1. Record start (activity).
+2. Spawn `SendPartyNotificationsWorkflow` as a child (TaskGroup task).
+3. Arm an auto-stop timer (TaskGroup task).
+4. Wait on `context.condition { $0.shouldExit }`.
+5. Whichever fires first — stop signal or auto-stop timer — falls through to record-end (activity) and return a `PartyResult`.
 
-**Temporal with Swift**
-- Four workflow types (start/stop party, update location, query state)
-- Workflow and activity definitions using Swift macros
-- Client and worker initialization with flexible authentication (API key or mTLS)
-- Worker integrated with Vapor server in same process
+## Quick start
 
-**iOS Integration**
-- Battery-efficient location tracking (10m accuracy, 50m distance filter)
-- Updates only when moved >50m AND 60+ seconds elapsed
-- Device-based authentication with Keychain UUID storage
-- Background location updates while party is active
+```bash
+# 1. Start a local Temporal dev server
+temporal server start-dev    # UI at http://localhost:8233
 
-**Performance & Security**
-- Web polling with exponential backoff (10s → 120s), pauses when tab hidden
-- Rate limiting (30 requests/minute per IP)
-- Device authentication middleware with optional UUID whitelist
-- JSON file storage (no database required)
+# 2. Configure env (uses plaintext + no auth by default)
+cp .env.example .env
+cp .env server/.env
+
+# 3. Run the server
+cd server && swift build && .build/debug/App serve
+
+# 4. Drive it
+http POST localhost:8080/api/party/start \
+  location:='{"lat":37.7749,"lng":-122.4194}' \
+  reason=demo \
+  autoStopHours:=2
+
+http GET  localhost:8080/api/state
+
+http POST localhost:8080/api/party/location \
+  location:='{"lat":37.7849,"lng":-122.4094}'
+
+http POST localhost:8080/api/party/reason reason="celebrating-1.0"
+
+http POST localhost:8080/api/party/extend additionalHours:=2
+
+http POST localhost:8080/api/party/stop
+```
+
+Open http://localhost:8233 to see the workflow, signals, child workflow, and timer events in the UI.
 
 ## Prerequisites
 
-- Swift 6.2+ with [Apple's Swift SDK for Temporal](https://github.com/apple/swift-temporal-sdk)
-- Xcode 16+ (for iOS app)
-- Temporal Server (local dev) or Temporal Cloud account
+- Swift 6.2+
+- macOS 15+ / iOS 18+
+- Temporal Server (local dev) or Temporal Cloud
+- Xcode 16+ (only for the iOS app)
 
-## Quick Start
-
-### 1. Configure Environment
-
-```bash
-cp .env.example .env
-# Edit .env to add your Google Maps API key
-cp .env server/.env
-```
-
-### 2. Start Temporal Server
-
-```bash
-temporal server start-dev
-```
-
-### 3. Run Server
-
-```bash
-cd server
-swift build
-.build/debug/App serve
-```
-
-Server starts on `http://127.0.0.1:8080` and loads config from `.env`.
-
-### 4. Run iOS App (Optional)
+## iOS app
 
 ```bash
 open app/JacobParty/JacobParty.xcodeproj
 ```
 
-Build and run in Xcode (⌘R). App loads `SERVER_URL` from `app/JacobParty/Config.xcconfig`.
+The visible UI is still the single party button. Under the hood, the app now has two transport modes:
 
-## Device Authentication
+- `TEMPORAL_DIRECT_ENABLED=NO` (default): original HTTP mode. The app calls Vapor, and Vapor drives Temporal.
+- `TEMPORAL_DIRECT_ENABLED=YES`: iOS Temporal mode. The app starts a `TemporalClient` and `TemporalWorker`, then starts/signals `PartyWorkflow` directly through the Temporal Swift SDK.
 
-The iOS app generates a unique UUID on first launch (stored in Keychain) and sends it in the `X-Device-ID` header with all requests.
+For real-device local testing, set `TEMPORAL_HOST` to your Mac's LAN IP address, not `127.0.0.1`. For the video path, use Temporal Cloud with TLS and an API key in an uncommitted local config.
 
-### Getting Your Device UUID
+The app still generates a UUID at first launch (stored in Keychain) and sends it as `X-Device-ID` on the HTTP path. Add allowed UUIDs to `ALLOWED_DEVICE_IDS` in `.env` (empty = all devices allowed).
 
-Run the iOS app and check server logs:
-```bash
-tail -f /tmp/server.log | grep "Device ID"
-# Output: 📱 Device ID: 779D6E13-14A4-4130-A82B-7D858AE4C34B (whitelist disabled)
-```
+## Temporal Cloud
 
-### Optional Whitelist
-
-Add allowed device UUIDs to `.env` (empty = all devices allowed):
 ```env
-ALLOWED_DEVICE_IDS=779D6E13-14A4-4130-A82B-7D858AE4C34B,ANOTHER-UUID-HERE
+TEMPORAL_TLS_ENABLED=true
+TEMPORAL_HOST=your-namespace.tmprl.cloud
+TEMPORAL_NAMESPACE=your-namespace
+# Choose one (or both for max security):
+TEMPORAL_API_KEY=your-api-key
+TEMPORAL_CLIENT_CERT=certs/client.pem
+TEMPORAL_CLIENT_KEY=certs/client.key
 ```
 
-**Endpoints:**
-- Public: `GET /` (website), `GET /api/state` (party status)
-- Protected: `POST /api/party/*` (requires device authentication)
+See [certs/README.md](certs/README.md) for mTLS certificate setup.
 
-## Container Deployment
+## Container deployment
 
 ```bash
 cd server
 docker build -t jacob-party .
 docker run -p 8080:8080 --env-file ../.env jacob-party
-
-# Or use Docker Compose
+# Or:
 docker-compose up -d
 ```
 
-For mTLS, mount certificates: `-v $(pwd)/../certs:/app/certs:ro`
+For mTLS, mount the cert directory: `-v $(pwd)/../certs:/app/certs:ro`.
 
-## Temporal Cloud Authentication
+## Key files
 
-**API Key (Recommended)**:
-```env
-TEMPORAL_TLS_ENABLED=true
-TEMPORAL_HOST=us-east-1.aws.api.temporal.io
-TEMPORAL_NAMESPACE=your-namespace
-TEMPORAL_API_KEY=your-api-key
-```
-
-**mTLS Certificates**:
-```env
-TEMPORAL_TLS_ENABLED=true
-TEMPORAL_HOST=your-namespace.tmprl.cloud
-TEMPORAL_NAMESPACE=your-namespace
-TEMPORAL_CLIENT_CERT=certs/client.pem
-TEMPORAL_CLIENT_KEY=certs/client.key
-```
-See [certs/README.md](certs/README.md) for setup. Can combine both methods for maximum security.
-
-## How It Works
-
-Four Temporal workflows handle all party operations:
-
-1. **PartyWorkflow** - Start party: `POST /api/party/start` → `recordPartyStart` activity → Write JSON
-2. **UpdateLocationWorkflow** - Update location: `POST /api/party/location` → `updateLocation` activity → Update JSON
-3. **GetPartyStateWorkflow** - Query state: `GET /api/state` → `getPartyState` activity → Read JSON
-4. **StopPartyWorkflow** - Stop party: `POST /api/party/stop` → `recordPartyEnd` activity → Delete JSON
-
-All workflows complete immediately. Activities handle JSON file storage.
-
-## API Testing
-
-Test the party lifecycle with [HTTPie](https://httpie.io):
-
-```bash
-# Check current state
-http GET localhost:8080/api/state
-
-# Start a party
-http --ignore-stdin POST localhost:8080/api/party/start \
-  location:='{"lat":37.7749,"lng":-122.4194}' \
-  reason=testing
-
-# Update location
-http --ignore-stdin POST localhost:8080/api/party/location \
-  location:='{"lat":37.7849,"lng":-122.4094}' \
-  reason=testing
-
-# Stop party
-http POST localhost:8080/api/party/stop
-```
-
-**Note:** Device authentication is disabled by default (see `ALLOWED_DEVICE_IDS` in `.env`).
-
-## Key Files
-
-- [server/Sources/App/configure.swift](server/Sources/App/configure.swift) - Temporal client and worker setup
-- [server/Sources/App/Workflows/](server/Sources/App/Workflows/) - Workflow definitions
-- [server/Sources/App/Activities/PartyActivities.swift](server/Sources/App/Activities/PartyActivities.swift) - Activity implementations
-- [server/Sources/App/routes.swift](server/Sources/App/routes.swift) - HTTP API routes
-- [server/Sources/App/Middleware/](server/Sources/App/Middleware/) - Auth and rate limiting
+- [server/Sources/App/Workflows/PartyWorkflow.swift](server/Sources/App/Workflows/PartyWorkflow.swift) — `PartyWorkflow` + `SendPartyNotificationsWorkflow`
+- [server/Sources/App/Activities/PartyActivities.swift](server/Sources/App/Activities/PartyActivities.swift) — including the heartbeating push-notification activity
+- [server/Sources/App/routes.swift](server/Sources/App/routes.swift) — HTTP → signals/queries/updates
+- [server/Sources/App/configure.swift](server/Sources/App/configure.swift) — client/worker setup, auth modes
+- [server/Sources/App/Models/PartyModels.swift](server/Sources/App/Models/PartyModels.swift) — workflow input/output and update/query payloads
+- [app/JacobParty/JacobParty/TemporalPartyService.swift](app/JacobParty/JacobParty/TemporalPartyService.swift) — on-device Temporal client/worker lifecycle
+- [app/JacobParty/JacobParty/TemporalPartyWorkflow.swift](app/JacobParty/JacobParty/TemporalPartyWorkflow.swift) — iOS-compatible workflow used by direct mode
 
 ## Debugging
 
-**Temporal UI:** `http://localhost:8233`
+**Temporal UI**: http://localhost:8233 — drill into a `PartyWorkflow` execution to see signals, the child `SendPartyNotificationsWorkflow`, and the auto-stop `TIMER_STARTED`/`TIMER_CANCELED` events.
 
-**CLI:**
+**CLI**:
 ```bash
 temporal workflow list
 temporal workflow describe --workflow-id jacob-party
+temporal workflow show --workflow-id jacob-party --output json | jq '.events[] | .eventType'
 ```
 
-**Common Issues:**
-- Map not showing? Check `GOOGLE_MAPS_API_KEY` in `.env` and Maps JavaScript API enabled
-- Server won't start? Verify Temporal is running (`temporal server start-dev`) and port 8080 is free
-- iOS location not updating? Check "Always Allow" location permission and party mode is active
+**Common issues**:
+- Map blank? `GOOGLE_MAPS_API_KEY` missing or Maps JavaScript API not enabled.
+- Server won't start? Verify `temporal server start-dev` is running and port 8080 is free.
+- iOS not updating? Check "Always Allow" location permission and that a party is active.

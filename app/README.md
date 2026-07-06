@@ -50,6 +50,22 @@ SERVER_URL = https://jacob.party
 
 For local development, comment out the production URL and uncomment localhost.
 
+### Temporal Swift SDK 1.0 direct mode
+
+The app can either use the original Vapor HTTP API or connect to Temporal directly from iOS:
+
+```xcconfig
+TEMPORAL_DIRECT_ENABLED = YES
+TEMPORAL_HOST = your-namespace.tmprl.cloud
+TEMPORAL_PORT = 7233
+TEMPORAL_NAMESPACE = your-namespace
+TEMPORAL_TASK_QUEUE = party-ios-queue
+TEMPORAL_TLS_ENABLED = YES
+TEMPORAL_API_KEY = your-api-key
+```
+
+For local real-device testing, run `temporal server start-dev` on your Mac and set `TEMPORAL_HOST` to the Mac's LAN IP address. `127.0.0.1` points at the iPhone/iPad itself.
+
 ## Troubleshooting
 
 **"Failed to create provisioning profile"**

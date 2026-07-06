@@ -6,38 +6,50 @@ struct Location: Codable, Sendable {
     let lng: Double
 }
 
-// MARK: - Workflow Inputs
+// MARK: - Workflow Input
 
-/// Input for starting a party
+/// Input passed to `PartyWorkflow.run` when a party starts.
 struct StartPartyInput: Codable, Sendable {
     let location: Location
     let source: String  // e.g., "ios-app", "web", "api"
-    let reason: String  // e.g., "user-pressed-button", "api-call"
-    let deviceId: String?
-    let autoStopHours: Int?  // Optional: for future long-running workflows
-}
-
-/// Input for stopping a party
-struct StopPartyInput: Codable, Sendable {
-    let source: String
     let reason: String
     let deviceId: String?
+    let autoStopHours: Int?
 }
 
-/// Input for updating location
-struct UpdateLocationInput: Codable, Sendable {
-    let location: Location
-    let source: String
-    let reason: String
-    let deviceId: String?
+// MARK: - Workflow Output / Query
+
+/// Result returned when `PartyWorkflow` finishes.
+struct PartyResult: Codable, Sendable {
+    let startedAt: Date
+    let endedAt: Date
+    let durationSeconds: Double
+    let locationUpdateCount: Int
 }
 
-/// Input for querying party state
-struct GetPartyStateInput: Codable, Sendable {
-    let source: String
+/// Snapshot of party state returned by `getPartyState` query.
+struct PartyStateOutput: Codable, Sendable {
+    let isPartying: Bool
+    let location: Location?
+    let startTime: Date?
     let reason: String
-    let deviceId: String?
+    let autoStopAt: Date
+    let locationUpdateCount: Int
 }
+
+// MARK: - Update Inputs
+
+/// Input for the `setReason` workflow update.
+struct SetReasonInput: Codable, Sendable {
+    let reason: String
+}
+
+/// Input for the `extendAutoStop` workflow update.
+struct ExtendAutoStopInput: Codable, Sendable {
+    let additionalHours: Int
+}
+
+// MARK: - HTTP Response
 
 struct PartyStateResponse: Content {
     let spinning: Bool
@@ -48,28 +60,10 @@ struct PartyStateResponse: Content {
 
 // MARK: - Push Notifications
 
-/// Push notification subscription
 struct PushSubscription: Codable, Sendable {
     let id: String
     let endpoint: String
     let authKey: String
     let p256dhKey: String
-    let createdAt: String  // ISO8601 string from JavaScript
-}
-
-/// Party event for history/audit log
-struct PartyEvent: Codable, Sendable {
-    enum EventType: String, Codable {
-        case started
-        case stopped
-        case locationUpdated
-        case subscriptionAdded
-        case subscriptionRemoved
-    }
-
-    let type: EventType
-    let location: Location?
-    let timestamp: Date
-    let source: String
-    let deviceId: String?
+    let createdAt: String
 }

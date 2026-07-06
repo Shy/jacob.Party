@@ -100,43 +100,68 @@ struct PartyActivities {
         return try SubscriptionManager.loadAll()
     }
 
-    /// Sends push notifications to subscribers.
-    /// EDUCATIONAL: Demonstrates external API calls in activities with proper error handling
+    /// Sends push notifications to subscribers, heartbeating per recipient.
+    ///
+    /// Heartbeats let the worker tell Temporal "still alive, here's my progress"
+    /// — and the heartbeat detail (`"i/total"`) survives retries, so a failed
+    /// attempt can resume from where it left off via
+    /// `ActivityExecutionContext.current?.info.heartbeatDetails(...)`. Cancellation
+    /// is also propagated through heartbeats: if the workflow cancels the
+    /// activity, `cancellationReason` will be set and we throw to bail out.
     @Activity
     func sendPushNotification(input: SendPushNotificationInput) async throws {
-        print("📬 Sending push notification to \(input.subscriptions.count) subscribers")
+        let activityContext = ActivityExecutionContext.current
+        let total = input.subscriptions.count
+        print("📬 Sending push notification to \(total) subscribers")
         print("   Message: \(input.message)")
 
-        // EDUCATIONAL: For production, you'd want proper dependency injection
-        // For this demo, we check environment and gracefully skip if VAPID not configured
+        // Resume from prior attempt's progress, if any. The heartbeat detail
+        // is the index of the next subscription to send to.
+        var resumeFrom = 0
+        if let info = activityContext?.info,
+           let prior = try? await info.heartbeatDetails(as: Int.self) {
+            resumeFrom = prior
+        }
+        if resumeFrom > 0 {
+            print("↻ Resuming from subscription \(resumeFrom)/\(total) after retry")
+        }
 
-        let vapidPublicKey = Environment.get("VAPID_PUBLIC_KEY")
-        let vapidPrivateKey = Environment.get("VAPID_PRIVATE_KEY")
-
-        guard let publicKey = vapidPublicKey, !publicKey.isEmpty,
-              let privateKey = vapidPrivateKey, !privateKey.isEmpty else {
+        guard let publicKey = Environment.get("VAPID_PUBLIC_KEY"), !publicKey.isEmpty,
+              let privateKey = Environment.get("VAPID_PRIVATE_KEY"), !privateKey.isEmpty else {
             print("⚠️ VAPID keys not configured - skipping push notifications")
-            print("   Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY environment variables")
-            print("   Or leave unconfigured to test workflows without push")
+            return
+        }
+        _ = (publicKey, privateKey)
+
+        let sender: WebPushSender
+        do {
+            sender = try WebPushSender()
+        } catch {
+            print("❌ Failed to initialize WebPushSender: \(error)")
             return
         }
 
-        // Create web push sender (uses swift-webpush library)
-        do {
-            let sender = try WebPushSender()
+        for index in resumeFrom..<total {
+            if activityContext?.cancellationReason != nil {
+                print("🛑 Activity cancelled at \(index)/\(total)")
+                throw CancellationError()
+            }
+            try Task.checkCancellation()
 
-            // Send notifications with proper VAPID authentication and encryption
-            try await sender.sendBatch(message: input.message, subscriptions: input.subscriptions)
-            print("✅ Push notifications sent to all subscribers")
-        } catch {
-            print("❌ Error sending push notifications: \(error)")
-            // Don't throw - we don't want to fail the workflow if push fails
-            // In production, you might want to log to error tracking service
+            let subscription = input.subscriptions[index]
+            do {
+                try await sender.send(message: input.message, to: subscription)
+            } catch {
+                // Per-subscription failures don't fail the whole batch — push services
+                // routinely return errors for expired subscriptions.
+                print("⚠️ Send failed for \(subscription.id): \(error)")
+            }
+
+            // Heartbeat with current progress so retries can resume here.
+            activityContext?.heartbeat(details: index + 1)
         }
 
-        // EDUCATIONAL: Activities should be idempotent
-        // Multiple calls with same input should be safe
-        // Web push services handle deduplication
+        print("✅ Push notifications dispatched to \(total) subscribers")
     }
 
     // MARK: - Helper Methods (File-based state for now)

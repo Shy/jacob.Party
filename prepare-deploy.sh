@@ -91,7 +91,7 @@ services:
     instance_size_slug: basic-xs
 
     health_check:
-      http_path: /api/state
+      http_path: /health
       initial_delay_seconds: 30
       period_seconds: 30
       timeout_seconds: 10

@@ -1,48 +1,48 @@
 import Foundation
 import Temporal
 
-/// Long-running workflow that represents the party system state.
+/// Long-running workflow that owns the state of a party session.
 ///
-/// EDUCATIONAL: This demonstrates Temporal's state management capabilities
-/// - Workflow state persists automatically (survives restarts)
-/// - State is queryable via workflow history
-/// - No external database needed
-/// - Perfect for business process state machines
-///
-/// This workflow runs indefinitely and maintains:
-/// - Current party state (is partying, location, when started)
-/// - Push notification subscriptions
-/// - Party history/audit log
+/// Demonstrates the SDK 1.0 idiomatic pattern: one durable workflow that lives
+/// for the duration of the party and is interacted with via signals (write),
+/// queries (read), and updates (read-write with validation). The workflow ends
+/// when a `stopParty` signal arrives or when the auto-stop timer fires.
 @Workflow
-final class PartyWorkflow {
-    // MARK: - Workflow State (Persisted by Temporal)
+struct PartyWorkflow {
+    // MARK: - Persistent State
 
-    /// Current party state
-    private var isPartying: Bool = false
-    private var currentLocation: Location?
-    private var partyStartTime: Date?
+    var isPartying: Bool = false
+    var currentLocation: Location
+    var partyStartTime: Date
+    var reason: String
+    var autoStopAt: Date
+    var locationUpdateCount: Int = 0
+    var shouldExit: Bool = false
 
-    /// Push notification subscriptions (stored in workflow)
-    private var pushSubscriptions: [PushSubscription] = []
+    init(input: StartPartyInput) {
+        self.currentLocation = input.location
+        self.reason = input.reason
+        // Placeholder; rewritten from `context.now` in `run` so values are deterministic.
+        self.partyStartTime = .distantPast
+        self.autoStopAt = .distantFuture
+    }
 
-    /// Party history for analytics/review
-    private var partyHistory: [PartyEvent] = []
+    // MARK: - Run
 
-    // MARK: - Workflow Execution
+    mutating func run(context: WorkflowContext<Self>, input: StartPartyInput) async throws -> PartyResult {
+        let hours = input.autoStopHours ?? 6
+        partyStartTime = context.now
+        autoStopAt = context.now.addingTimeInterval(TimeInterval(hours * 3600))
+        isPartying = true
 
-    func run(input: StartPartyInput) async throws -> String {
-        let startTime = Date()
-
-        Workflow.logger.info("Party started", metadata: [
+        context.logger.info("Party started", metadata: [
             "source": .string(input.source),
             "reason": .string(input.reason),
             "deviceId": .string(input.deviceId ?? "none"),
-            "location": .string("\(input.location.lat),\(input.location.lng)")
+            "auto_stop_hours": .stringConvertible(hours),
         ])
 
-        // Activity: Record party start with retry policy
-        // EDUCATIONAL: Critical operations get aggressive retry configuration
-        try await Workflow.executeActivity(
+        try await context.executeActivity(
             PartyActivities.Activities.RecordPartyStart.self,
             options: .init(
                 startToCloseTimeout: .seconds(10),
@@ -54,13 +54,156 @@ final class PartyWorkflow {
                 )
             ),
             input: PartyActivities.RecordPartyStartInput(
-                location: input.location,
-                startTime: startTime
+                location: currentLocation,
+                startTime: partyStartTime
             )
         )
 
-        // Get push subscriptions
-        let subscriptions = try await Workflow.executeActivity(
+        // Run two background tasks alongside the main wait:
+        //  1. fan out push notifications via a child workflow
+        //  2. arm an auto-stop timer that flips `shouldExit` when it fires
+        // The main task awaits `shouldExit`, which is also flipped by the
+        // `stopParty` signal — whichever happens first wins.
+        let parentWorkflowId = context.info.workflowID
+        let plannedAutoStopAt = autoStopAt
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                _ = try? await context.executeChildWorkflow(
+                    SendPartyNotificationsWorkflow.self,
+                    options: .init(id: "\(parentWorkflowId)-notify-start"),
+                    input: SendPartyNotificationsWorkflow.Input(
+                        message: "🎉 Jacob started partying, join at jacob.party"
+                    )
+                )
+            }
+
+            group.addTask {
+                let interval = plannedAutoStopAt.timeIntervalSince(context.now)
+                guard interval > 0 else { return }
+                try await context.sleep(
+                    for: .seconds(interval),
+                    summary: "auto-stop after \(hours)h"
+                )
+                context.mutateState { $0.shouldExit = true }
+            }
+
+            try await context.condition { $0.shouldExit }
+            group.cancelAll()
+        }
+
+        let endTime = context.now
+        isPartying = false
+
+        try await context.executeActivity(
+            PartyActivities.Activities.RecordPartyEnd.self,
+            options: .init(
+                startToCloseTimeout: .seconds(10),
+                retryPolicy: RetryPolicy(
+                    initialInterval: .seconds(1),
+                    backoffCoefficient: 2.0,
+                    maximumInterval: .seconds(10),
+                    maximumAttempts: 3
+                )
+            ),
+            input: PartyActivities.RecordPartyEndInput(
+                startTime: partyStartTime,
+                endTime: endTime
+            )
+        )
+
+        let duration = endTime.timeIntervalSince(partyStartTime)
+        context.logger.info("Party ended", metadata: [
+            "duration_seconds": .stringConvertible(Int(duration)),
+            "location_updates": .stringConvertible(locationUpdateCount),
+        ])
+
+        return PartyResult(
+            startedAt: partyStartTime,
+            endedAt: endTime,
+            durationSeconds: duration,
+            locationUpdateCount: locationUpdateCount
+        )
+    }
+
+    // MARK: - Signals
+
+    /// Updates the current party location. Sent as the user moves around.
+    @WorkflowSignal
+    mutating func updateLocation(input: Location) {
+        guard isPartying else { return }
+        currentLocation = input
+        locationUpdateCount += 1
+    }
+
+    /// Ends the party. Causes `run` to fall through to recording the end.
+    @WorkflowSignal
+    mutating func stopParty(input: Void) {
+        shouldExit = true
+    }
+
+    // MARK: - Queries
+
+    /// Returns the current state of the party without writing to history.
+    @WorkflowQuery
+    func getPartyState(input: Void) throws -> PartyStateOutput {
+        PartyStateOutput(
+            isPartying: isPartying,
+            location: isPartying ? currentLocation : nil,
+            startTime: isPartying ? partyStartTime : nil,
+            reason: reason,
+            autoStopAt: autoStopAt,
+            locationUpdateCount: locationUpdateCount
+        )
+    }
+
+    // MARK: - Updates
+
+    /// Changes the party reason. Validates length, then mutates and returns
+    /// a description of the change. Demonstrates the validate-then-mutate
+    /// pattern that updates enable.
+    @WorkflowUpdate
+    mutating func setReason(input: SetReasonInput) throws -> String {
+        let trimmed = input.reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count <= 100 else {
+            throw ApplicationError(
+                message: "Reason must be 1-100 characters after trimming",
+                type: "InvalidReason",
+                isNonRetryable: true
+            )
+        }
+        let old = reason
+        reason = trimmed
+        return "Reason changed from '\(old)' to '\(trimmed)'"
+    }
+
+    /// Pushes the auto-stop further into the future. Validates the additional
+    /// duration and returns the new auto-stop time.
+    @WorkflowUpdate
+    mutating func extendAutoStop(input: ExtendAutoStopInput) throws -> Date {
+        guard input.additionalHours >= 1, input.additionalHours <= 24 else {
+            throw ApplicationError(
+                message: "Additional hours must be between 1 and 24",
+                type: "InvalidExtension",
+                isNonRetryable: true
+            )
+        }
+        autoStopAt = autoStopAt.addingTimeInterval(TimeInterval(input.additionalHours * 3600))
+        return autoStopAt
+    }
+}
+
+/// Child workflow spawned from `PartyWorkflow.run` to fan out push
+/// notifications. Isolates retry/timeout behaviour from the parent and shows
+/// up as a distinct execution in the Temporal UI.
+@Workflow
+struct SendPartyNotificationsWorkflow {
+    struct Input: Codable, Sendable {
+        let message: String
+    }
+
+    mutating func run(context: WorkflowContext<Self>, input: Input) async throws {
+        let subscriptions = try await context.executeActivity(
             PartyActivities.Activities.GetSubscriptions.self,
             options: .init(
                 startToCloseTimeout: .seconds(5),
@@ -73,50 +216,16 @@ final class PartyWorkflow {
             )
         )
 
-        // Send push notifications if there are subscribers
-        if !subscriptions.isEmpty {
-            try await Workflow.executeActivity(
-                PartyActivities.Activities.SendPushNotification.self,
-                options: .init(
-                    startToCloseTimeout: .seconds(30),
-                    retryPolicy: RetryPolicy(
-                        initialInterval: .seconds(1),
-                        backoffCoefficient: 2.0,
-                        maximumInterval: .seconds(10),
-                        maximumAttempts: 3
-                    )
-                ),
-                input: PartyActivities.SendPushNotificationInput(
-                    message: "🎉 Jacob started partying, join at jacob.party",
-                    subscriptions: subscriptions
-                )
-            )
+        guard !subscriptions.isEmpty else {
+            context.logger.info("No subscribers to notify")
+            return
         }
 
-        return "Party started at \(input.location)"
-    }
-
-    // MARK: - State Management Helpers
-
-    private func logEvent(_ event: PartyEvent) {
-        partyHistory.append(event)
-
-        // Keep last 1000 events to avoid unbounded growth
-        if partyHistory.count > 1000 {
-            partyHistory.removeFirst(partyHistory.count - 1000)
-        }
-    }
-
-    private func formatLocation(_ location: Location) -> String {
-        return String(format: "(%.4f, %.4f)", location.lat, location.lng)
-    }
-
-    private func sendPushNotifications(message: String, subscriptions: [PushSubscription]) async throws {
-        // Activity: Send push notifications with retry policy
-        try await Workflow.executeActivity(
+        try await context.executeActivity(
             PartyActivities.Activities.SendPushNotification.self,
             options: .init(
-                startToCloseTimeout: .seconds(30),
+                startToCloseTimeout: .seconds(60),
+                heartbeatTimeout: .seconds(15),
                 retryPolicy: RetryPolicy(
                     initialInterval: .seconds(1),
                     backoffCoefficient: 2.0,
@@ -125,128 +234,9 @@ final class PartyWorkflow {
                 )
             ),
             input: PartyActivities.SendPushNotificationInput(
-                message: message,
+                message: input.message,
                 subscriptions: subscriptions
             )
         )
     }
 }
-
-/// Workflow to update party location
-@Workflow
-final class UpdateLocationWorkflow {
-    func run(input: UpdateLocationInput) async throws -> String {
-        Workflow.logger.info("Location update requested", metadata: [
-            "source": .string(input.source),
-            "location": .string("\(input.location.lat),\(input.location.lng)")
-        ])
-
-        // Note: This workflow should signal the main PartyWorkflow
-        // For now, we'll execute an activity that updates state
-        // In SDK 0.6+, this would use signals to update the long-running workflow
-
-        return "Location updated"
-    }
-}
-
-/// Workflow to stop party
-@Workflow
-final class StopPartyWorkflow {
-    func run(input: StopPartyInput) async throws -> String {
-        let endTime = Date()
-
-        Workflow.logger.info("Party stopped", metadata: [
-            "source": .string(input.source),
-            "reason": .string(input.reason),
-            "deviceId": .string(input.deviceId ?? "none")
-        ])
-
-        // Activity: Record party end
-        try await Workflow.executeActivity(
-            PartyActivities.Activities.RecordPartyEnd.self,
-            options: .init(
-                startToCloseTimeout: .seconds(10),
-                retryPolicy: RetryPolicy(
-                    initialInterval: .seconds(1),
-                    backoffCoefficient: 2.0,
-                    maximumInterval: .seconds(10),
-                    maximumAttempts: 3
-                )
-            ),
-            input: PartyActivities.RecordPartyEndInput(
-                startTime: endTime,
-                endTime: endTime
-            )
-        )
-
-        return "Party stopped"
-    }
-}
-
-/// Workflow to query party state
-@Workflow
-final class GetPartyStateWorkflow {
-    func run(input: GetPartyStateInput) async throws -> PartyActivities.GetPartyStateOutput {
-        Workflow.logger.info("Party state queried", metadata: [
-            "source": .string(input.source)
-        ])
-
-        // Note: In a full implementation, this would query the long-running workflow
-        // For SDK 0.5 compatibility, we use a simple activity-based approach
-        return try await Workflow.executeActivity(
-            PartyActivities.Activities.GetPartyState.self,
-            options: .init(
-                startToCloseTimeout: .seconds(5),
-                retryPolicy: RetryPolicy(
-                    initialInterval: .milliseconds(500),
-                    backoffCoefficient: 1.5,
-                    maximumInterval: .seconds(2),
-                    maximumAttempts: 2
-                )
-            )
-        )
-    }
-}
-
-// MARK: - Educational Notes
-
-/*
- TEMPORAL STATE MANAGEMENT PATTERN:
-
- This workflow demonstrates storing application state in Temporal:
-
- ✅ GOOD for workflow state:
-    - Current party status (small, changes infrequently)
-    - Business process state (order status, approval state)
-    - Audit trail/history (what happened in this process)
-    - Configuration for THIS workflow instance
-
- ❌ NOT good for workflow state:
-    - Large datasets (>50KB recommended limit)
-    - High-frequency updates (1000s/second)
-    - Shared state across many workflows
-    - Data queried independently by external systems
-
- BENEFITS:
-    - State persists automatically (survives crashes/restarts)
-    - No database setup needed
-    - Built-in audit trail via workflow history
-    - Queryable via Temporal UI
-    - Version controlled with workflow code
-
- TRADE-OFFS:
-    - Limited to workflow event size limits
-    - Not optimized for complex queries
-    - Need to query workflow to access state
-
- FOR JACOB.PARTY:
-    - Party state: ~100 bytes (perfect for workflow)
-    - Push subscriptions: ~1KB per 10 subscriptions (acceptable)
-    - Party history: ~10KB per 100 events (acceptable)
-    - Total: Well within limits for educational demo
-
- FUTURE ENHANCEMENTS (SDK 0.6+):
-    - Use signals to update location without new workflow
-    - Use queries to read state without executing workflow
-    - Use continue-as-new for very long-running parties
-*/

@@ -95,8 +95,9 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        let actionIdentifier = response.actionIdentifier
         Task { @MainActor in
-            switch response.actionIdentifier {
+            switch actionIdentifier {
             case "KEEP_PARTYING":
                 // User wants to keep partying - reschedule for another 6 hours
                 NotificationCenter.default.post(name: NSNotification.Name("KeepPartyingTapped"), object: nil)
@@ -108,7 +109,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             default:
                 break
             }
-            completionHandler()
         }
+        completionHandler()
     }
 }

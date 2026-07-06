@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		92D2A0012ED0000000000001 /* Temporal in Frameworks */ = {isa = PBXBuildFile; productRef = 92D2A0002ED0000000000001 /* Temporal */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		92C5B8DC2E956D5B00074083 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
 		92F56CF12E945D4900A8D3E0 /* JacobParty.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JacobParty.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -37,6 +41,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				92D2A0012ED0000000000001 /* Temporal in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -80,6 +85,7 @@
 			);
 			name = JacobParty;
 			packageProductDependencies = (
+				92D2A0002ED0000000000001 /* Temporal */,
 			);
 			productName = JacobParty;
 			productReference = 92F56CF12E945D4900A8D3E0 /* JacobParty.app */;
@@ -110,6 +116,7 @@
 			mainGroup = 92F56CE82E945D4900A8D3E0;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				92D2A0022ED0000000000001 /* XCRemoteSwiftPackageReference "swift-temporal-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 92F56CF22E945D4900A8D3E0 /* Products */;
@@ -268,7 +275,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = JacobParty/Info.plist;
@@ -288,10 +295,9 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -303,7 +309,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = JacobParty/Info.plist;
@@ -323,15 +329,33 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		92D2A0022ED0000000000001 /* XCRemoteSwiftPackageReference "swift-temporal-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-temporal-sdk.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		92D2A0002ED0000000000001 /* Temporal */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 92D2A0022ED0000000000001 /* XCRemoteSwiftPackageReference "swift-temporal-sdk" */;
+			productName = Temporal;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCConfigurationList section */
 		92F56CEC2E945D4900A8D3E0 /* Build configuration list for PBXProject "JacobParty" */ = {

@@ -11,6 +11,7 @@ class PartyViewModel: ObservableObject {
     private let feedbackGenerator = UIImpactFeedbackGenerator(style: .heavy)
     private let locationManager = LocationManager()
     private let notificationManager = NotificationManager.shared
+    private let temporalService = TemporalPartyService()
     private let baseURL: String = {
         guard let serverURL = Bundle.main.object(forInfoDictionaryKey: "SERVER_URL") as? String,
               !serverURL.isEmpty,
@@ -122,7 +123,7 @@ class PartyViewModel: ObservableObject {
             if isPartyMode {
                 await stopParty()
             } else {
-                startParty()
+                await startParty()
             }
         }
     }
@@ -131,7 +132,7 @@ class PartyViewModel: ObservableObject {
         isPressed = pressed
     }
 
-    private func startParty() {
+    private func startParty() async {
         isPartyMode = true
         feedbackGenerator.impactOccurred()
 
@@ -145,8 +146,16 @@ class PartyViewModel: ObservableObject {
         Task {
             do {
                 let location = locationManager.locationOrDefault
-                try await sendStartParty(latitude: location.latitude, longitude: location.longitude)
-                print("✅ Party started via HTTP API")
+                if await temporalService.isEnabled {
+                    try await temporalService.startParty(
+                        location: Location(lat: location.latitude, lng: location.longitude),
+                        deviceId: deviceID
+                    )
+                    print("✅ Party started via Temporal Swift SDK on iOS")
+                } else {
+                    try await sendStartParty(latitude: location.latitude, longitude: location.longitude)
+                    print("✅ Party started via HTTP API")
+                }
             } catch {
                 print("❌ Failed to start party: \(error)")
                 // Rollback UI state on error
@@ -168,8 +177,13 @@ class PartyViewModel: ObservableObject {
 
         // Send stop party request to server
         do {
-            try await sendStopParty()
-            print("✅ Party stopped via HTTP API")
+            if await temporalService.isEnabled {
+                try await temporalService.stopParty()
+                print("✅ Party stopped via Temporal Swift SDK on iOS")
+            } else {
+                try await sendStopParty()
+                print("✅ Party stopped via HTTP API")
+            }
         } catch {
             print("❌ Failed to stop party: \(error)")
             // Rollback UI state on error
@@ -180,6 +194,24 @@ class PartyViewModel: ObservableObject {
     // MARK: - Network Methods
 
     func fetchInitialState() async {
+        if await temporalService.isEnabled {
+            do {
+                let state = try await temporalService.fetchState()
+                isPartyMode = state.isPartying
+                appName = Bundle.main.object(forInfoDictionaryKey: "APP_NAME") as? String ?? "jacob"
+
+                if state.isPartying {
+                    locationManager.startUpdatingLocation()
+                    notificationManager.schedulePartyTimeoutNotification()
+                }
+
+                print("✅ Fetched initial state from Temporal: \(appName) is \(state.isPartying ? "partying" : "not partying")")
+                return
+            } catch {
+                print("ℹ️ Temporal state unavailable, falling back to HTTP state: \(error)")
+            }
+        }
+
         guard let url = URL(string: "\(baseURL)/api/state") else { return }
 
         var request = URLRequest(url: url)
@@ -255,6 +287,11 @@ class PartyViewModel: ObservableObject {
         guard isPartyMode else { return }
 
         let location = locationManager.locationOrDefault
+
+        if await temporalService.isEnabled {
+            try await temporalService.updateLocation(Location(lat: location.latitude, lng: location.longitude))
+            return
+        }
 
         guard let url = URL(string: "\(baseURL)/api/party/location") else {
             throw NetworkError.invalidURL
